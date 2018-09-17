@@ -1,1 +1,6 @@
 *.o
+export_syms
+*.kld
+*.ko
+machine
+x86
