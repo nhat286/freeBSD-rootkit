@@ -34,6 +34,7 @@
 #include <sys/sysent.h>
 #include <sys/kernel.h>
 #include <sys/systm.h>
+#include <sys/sysproto.h>
 
 /* The system call's arguments. */
 struct sc_example_args {
