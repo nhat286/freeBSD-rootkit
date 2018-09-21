@@ -49,7 +49,7 @@ sc_example(struct thread *td, void *syscall_args)
 	struct sc_example_args *uap;
 	uap = (struct sc_example_args *)syscall_args;
 
-	printf("%s\n", uap->str);
+	printf("[*] module: %s\n", uap->str);
 
 	return(0);
 }
@@ -71,11 +71,11 @@ load(struct module *module, int cmd, void *arg)
 
 	switch (cmd) {
 	case MOD_LOAD:
-		uprintf("System call loaded at offset %d.\n", offset);
+		uprintf("[*] module: System call loaded at offset %d.\n", offset);
 		break;
 
 	case MOD_UNLOAD:
-		uprintf("System call unloaded from offset %d.\n", offset);
+		uprintf("[*] module: System call unloaded from offset %d.\n", offset);
 		break;
 
 	default:

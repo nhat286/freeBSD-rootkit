@@ -33,6 +33,7 @@
 #include <sys/syscall.h>
 #include <sys/types.h>
 #include <sys/module.h>
+#include <errno.h>
 
 int
 main(int argc, char *argv[])
@@ -45,11 +46,32 @@ main(int argc, char *argv[])
 		exit(0);
 	}
 
+    printf("[*] interface: argv[1] is: %s\n", argv[1]);
+
 	/* Determine sc_example's offset value. */
 	stat.version = sizeof(stat);
 	modstat(modfind("sys/sc_example"), &stat);
 	syscall_num = stat.data.intval;
 
+    printf("**********\n");
+
+    // valid system call using the syscall num we obtained
+    printf("[*] interface: demonstrating the behavior of a valid system call\n");
+    if (syscall(syscall_num, argv[1]) != -1) {
+        printf("[*] interface: syscall successfully executed (with valid syscall num)\n");
+    } else {
+        /* impossible to reach here */
+    }
+
+    printf("**********\n");
+
 	/* Call sc_example. */
-	return(syscall(syscall_num, argv[1]));
+    printf("[*] interface: demonstrating the behavior of an invalid system call\n");
+    if (syscall(211, argv[1]) == -1 && errno == ENOSYS) {
+        perror("[*] interface: syscall unsuccessfully executed (with invalid syscall num)");
+    } else {
+        /* impossible to reach here */
+    }
+
+    return 0;
 }

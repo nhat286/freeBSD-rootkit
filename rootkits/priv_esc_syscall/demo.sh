@@ -2,10 +2,10 @@
 
 set -e
 
-KLDNAME='sc_example.ko'
+KLDNAME='priv_esc.ko'
+PASSWD='6447_priv_esc_passwda'
 
 make 2>&1 > /dev/null
 kldload module/$KLDNAME || (kldunload $KLDNAME && kldload module/$KLDNAME)
-./interface/interface "Hello, kernel!"
+./interface/interface $PASSWD
 kldunload $KLDNAME
-dmesg | tail -n 1
