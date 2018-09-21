@@ -4,3 +4,14 @@ export_syms
 *.ko
 machine
 x86
+.depend
+interface.debug
+interface.full
+interface
+*.core
+
+# Swap
+[._]*.s[a-v][a-z]
+[._]*.sw[a-p]
+[._]s[a-v][a-z]
+[._]sw[a-p]
