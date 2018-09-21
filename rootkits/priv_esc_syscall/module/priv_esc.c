@@ -6,6 +6,8 @@
 #include <sys/sysproto.h>
 #include <sys/errno.h>
 #include <sys/proc.h>
+#include <sys/syscall.h>
+#include <sys/syscallsubr.h>
 
 #define PRIV_ESC_PASSWD "6447_priv_esc_passwd"
 

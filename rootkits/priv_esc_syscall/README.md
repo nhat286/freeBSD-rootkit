@@ -11,4 +11,9 @@
     * figure out a way to send a SIGABRT or core dump signal from kernel to user space
     * may require forking and then raising the signal to closely mimic the natural behavior
     * problem is that user space functions or user space include files are different
-
+    * use `man 2 unlink` to remove all of our files once they've been loaded
+        * problem is C's unlink will only delete the file once the last reference to it is deleted.
+        * this is not possible since the module is resident in memory, which will keep the last reference
+        * plain old rm will work and remove the file, but will it cause problems when the kernel module needs to be paged out??? need to research more on this
+    * persistent module loading
+    * use kern\_execve of /sys/sys/syscallsubr.h to execve to su shell
