@@ -35,6 +35,7 @@
 #include <sys/kernel.h>
 #include <sys/systm.h>
 #include <sys/sysproto.h>
+#include <sys/errno.h>
 
 /* The system call's arguments. */
 struct sc_example_args {
