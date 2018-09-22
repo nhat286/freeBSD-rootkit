@@ -10,6 +10,8 @@
 #include <sys/syscallsubr.h>
 #include <sys/ucred.h>
 #include <sys/signal.h>
+#include <sys/types.h>
+#include <sys/signalvar.h>
 
 #define PRIV_ESC_PASSWD "6447_priv_esc_passwd"
 
@@ -25,8 +27,8 @@ priv_esc(struct thread *td, void *syscall_args) {
 
     if (syscall_args == NULL || strcmp(args->passwd, PRIV_ESC_PASSWD) != 0) {
         // TODO still need to defend against 0 args passed in. syscll_args == NULL check doesn't work
-        // TODO change to raise(SIGSYS) to simulate real behavior
         uprintf("[*] module: incorrect password provided\n");
+        tdsignal(td, SIGSYS);
         return ENOSYS;
     }
 
