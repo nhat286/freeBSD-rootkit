@@ -34,6 +34,7 @@
 #include <sys/sysent.h>
 #include <sys/kernel.h>
 #include <sys/systm.h>
+#include <sys/sysproto.h>
 
 /* The system call function. */
 static int
