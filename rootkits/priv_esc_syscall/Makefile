@@ -1,3 +1,3 @@
-SUBDIR= module interface
+SUBDIR= module
 
 .include <bsd.subdir.mk>
