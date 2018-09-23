@@ -48,3 +48,11 @@ The ufs_itimes function has been improved and expanded since the book came out:
 - Now it is expanded into `ufs_itimes` and `ufs_locked_itimes`.
 - `ufs_itimes` simply acquires and releases locks and calls the locked version in between
 - In the file itself it might be easier to patch out the calls to the function rather than the internals ? will try experiment with that 
+
+
+The command to be run (assuming sudo) is:
+```
+sed -i '' '/kld/d' /var/log/auth.log
+```
+
+Because of this we need to rollback `sed`'s Access time as well ! 
