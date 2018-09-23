@@ -12,7 +12,7 @@ _not bulletproof in terms of detection though_
 Using `touch` to reset the Access and Modified time  
 To reset the **Change** time however it requires updating the system time:
 - We can do this on FreeBSD by doing `date <TIME>` ie. `date 1432` will update the current time of the date to 2:32pm without changing the date
-- However the very act of triggering a write to these logs by the kernel will also update these log files
+- However the very act of triggering a write to these logs by the kernel will also update the M and C times of these log files
     - It is easy to check for mismatch in updates though, as the change/modified time should match excatly the timestamp of the most recent message !!!  
 
 Example: 
