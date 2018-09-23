@@ -39,3 +39,12 @@ To predict the sequence of bytes in kernel (to avoid fail in kvm writes ultimate
             0.10 real         0.08 user         0.01 sys
 ``` 
 
+### Byte Patching:
+
+The source can be found in `/sys/ufs/ufs/ufs_vnops.c`
+The disassembly can be done by doing: `objdump -M intel -d --start-address=0xc0e2e230 /boot/kernel/kernel | head -185`
+
+The ufs_itimes function has been improved and expanded since the book came out:
+- Now it is expanded into `ufs_itimes` and `ufs_locked_itimes`.
+- `ufs_itimes` simply acquires and releases locks and calls the locked version in between
+- In the file itself it might be easier to patch out the calls to the function rather than the internals ? will try experiment with that 
