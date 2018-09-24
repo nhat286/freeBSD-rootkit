@@ -1,4 +1,4 @@
-KMOD=	priv_esc
-SRCS=	priv_esc.c
+KMOD=	hijack
+SRCS=	hijack.c
 
 .include <bsd.kmod.mk>
