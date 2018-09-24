@@ -27,6 +27,7 @@
  * SUCH DAMAGE.
  */
 
+#include <stdlib.h>     // to stop warning messages
 #include <errno.h>
 #include <stdio.h>
 #include <sys/time.h>
