@@ -33,6 +33,9 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
+// Book source uses /sbin but here we use /tmp
+// If you want to use /sbin run the program with sudo rights 
+
 int
 main(int argc, char *argv[])
 {
@@ -47,14 +50,37 @@ main(int argc, char *argv[])
 	time[0].tv_sec = sb.st_atime;
 	time[1].tv_sec = sb.st_mtime;
 
-	/*
-	 * Do something to /sbin/.
-	 */
+    time[0].tv_usec = 0;    //to stop utimes from complaining about EINVAL
+    time[1].tv_usec = 0;
+
+    //Debugging
+    printf("Before changing sbin:\n");
+    printf("atime = %d\nmtime = %d\n", time[0].tv_sec, time[1].tv_sec);
+
+	/* Do something to /sbin/. */
+    system("touch /sbin/REMOVEME && rm -f /sbin/REMOVEME");
+
+    //Debugging
+    struct stat changed;
+    if(stat("/sbin", &changed) < 0) {
+        fprintf(stderr, "STAT ERROR (after change): %d\n", errno);
+        exit(-1);
+    }
+    printf("After changing sbin:\n");
+    printf("atime = %d\nmtime = %d\n", changed.st_atime, changed.st_mtime); 
 
 	if (utimes("/sbin", (struct timeval *)&time) < 0) {
 		fprintf(stderr, "UTIMES ERROR: %d\n", errno);
 		exit(-1);
 	}
+
+    //Debugging
+    if(stat("/sbin", &changed) < 0) {
+        fprintf(stderr, "STAT ERROR (after rollback): %d\n", errno);
+        exit(-1);
+    }
+    printf("After rollback:\n");
+    printf("atime = %d\nmtime = %d\n", changed.st_atime, changed.st_mtime); 
 
 	exit(0);
 }

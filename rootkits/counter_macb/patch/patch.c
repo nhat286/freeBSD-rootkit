@@ -135,6 +135,8 @@ main(int argc, char *argv[])
 	time[0].tv_sec = sb.st_atime;
 	time[1].tv_sec = sb.st_mtime;
 
+    time[0].tv_usec = time[1].tv_usec = 0;
+
 	/* Patch ufs_itimes. */
 	if (kvm_write(kd, nl[0].n_value + offset1, nop_code,
 	    sizeof(nop_code) - 1) < 0) {
