@@ -20,7 +20,7 @@ c0e2e252:	0f 94 c1             	sete   cl
 c0e2e255:	84 c9                	test   cl,cl
 c0e2e257:	74 34                	je     c0e2e28d <ufs_itimes+0x5d>
 c0e2e259:	89 f9                	mov    ecx,edi
-c0e2e25b:	e8 40 00 00 00       	call   c0e2e2a0 <ufs_itimes_locked>
+c0e2e25b:	e8 40 00 00 00       	call   c0e2e2a0 <ufs_itimes_locked>     # ufs_itimes_locked(vp);
 c0e2e260:	83 3d ac 53 72 c1 00 	cmp    DWORD PTR ds:0xc17253ac,0x0
 c0e2e267:	75 16                	jne    c0e2e27f <ufs_itimes+0x4f>
 c0e2e269:	31 c9                	xor    ecx,ecx
