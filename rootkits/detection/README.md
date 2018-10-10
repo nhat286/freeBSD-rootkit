@@ -20,3 +20,23 @@
 ```
 
 - Need to find a way to compile statically linked, running `make` will create all but according to the Makefile specs, we want to be able to compile our own ! 
+
+#### A somewhat okay way to statically compile binaries 
+After much experimentation, I discovered this method which works for some but not for others:
+```
+# Using an example such as rm
+$ cd /usr/src/bin/pwd
+
+$ make && cat .depend && make clean
+  pwd.full: /usr/lib/libc.a
+  
+( Note the libraries depeneded on to create the full binary )
+$ cc -static pwd.c /usr/lib/libc.a
+
+$ file a.out
+
+( It should say staticlly linked)
+
+```
+
+Unfortunately it still doesn't work for some weird shit like `ls.c`, I will try to figure it out 
