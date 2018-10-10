@@ -27,7 +27,7 @@ After much experimentation, I discovered this method which works for some but no
 # Using an example such as rm
 $ cd /usr/src/bin/pwd
 
-$ make && cat .depend && make clean
+$ make > /dev/null && cat .depend && make clean > /dev/null  (you can run these seprataely too it doesn't matter) 
   pwd.full: /usr/lib/libc.a
   
 ( Note the libraries depeneded on to create the full binary )
