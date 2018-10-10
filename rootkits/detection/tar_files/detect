@@ -1,7 +1,10 @@
 #!/bin/sh
 
-DETECTED=1
+DETECTED=1  # exit $DETECTED to exit 1 
 CLEAN=0
+
+# rootkit heuristic score 
+SCORE=0
 
 # ===== check Access time of /usr/bin/cc ====
 # Since most groups will use cc to compile their LKM's 
@@ -10,7 +13,7 @@ access=`stat -f "%Sa|%SB" -n | cut -d\| -f1`
 birth=`stat -f "%Sa|%SB"  -n | cut -d\| -f2`
 
 # check for access and birth time mismatch
-[ "$access" != "$birth" ] && echo "cc has been executed recently" && exit $DETECTED
+[ "$access" != "$birth" ] && echo -e "cc has been executed recently\t[!]" && SCORE=$((SCORE += 1))
 
 
 # ==== run hashsum checks on binaries ====
@@ -19,11 +22,28 @@ birth=`stat -f "%Sa|%SB"  -n | cut -d\| -f2`
 
 while read -r line
 do
-    bin/echo $line
+    file=`bin/echo $line | cut -d\  -f1`
+    path=`bin/echo $line | cut -d\  -f2`
+    hsum=`bin/echo $line | cut -d\  -f3`
+
+    nsum=`bin/cat  $path | bin/md5`
+
+if [ "$hsum" = "$nsum" ] 
+then
+    echo -e "[passed]\t $file"
+else
+    echo -e "$file:\tchecksum failed \t [!]" && SCORE=$((SCORE += 1))
+fi
+
 done < hashsums 
 
 # ==== load a fake KLD and it should be at syscall offset 210 ====
+#MSG="$(kldload bin/sc_example.ko 2>&1)"
+#NUM=`bin/cat "$MSG" | grep -o "[0-9]+"`
+#echo $NUM
+#kldunload sc_example.ko
 
+# ==== if stage one: run daemonized ktrace / truss to listen for syscalls and suspicious strings
+# ==== if stage two: collect results and analyse ====
 
-
-
+echo -e "===================\nRootkit Score: $SCORE/10\n==================="
