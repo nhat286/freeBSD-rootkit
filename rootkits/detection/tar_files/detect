@@ -1,9 +1,28 @@
 #!/bin/sh
 
-# We check if cc has been executed before our script was run
+DETECTED=1
+CLEAN=0
+
+# ===== check Access time of /usr/bin/cc ====
 # Since most groups will use cc to compile their LKM's 
-# If the Access time != Modified time && Access time != create time
-# Most likely a rootkit was installed
+# most likely a rootkit was installed
+access=`stat -f "%Sa|%SB" -n | cut -d\| -f1`
+birth=`stat -f "%Sa|%SB"  -n | cut -d\| -f2`
+
+# check for access and birth time mismatch
+[ "$access" != "$birth" ] && echo "cc has been executed recently" && exit $DETECTED
+
+
+# ==== run hashsum checks on binaries ====
+# bring in our own md5 and cat, hash the binaries and compare to our hashsum file
+# if there is any difference it should raise some flags
+
+while read -r line
+do
+    bin/echo $line
+done < hashsums 
+
+# ==== load a fake KLD and it should be at syscall offset 210 ====
 
 
 
