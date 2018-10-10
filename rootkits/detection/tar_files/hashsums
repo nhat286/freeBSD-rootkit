@@ -1,0 +1,10 @@
+stat /usr/bin/stat 3427591dd3a6437daa755ce0004d14de
+date /bin/date 55aed9b2dcafc10b17d91b7361432025
+kldload /sbin/kldload a5f07b6d57b1e2855a2df7ebee3c79de
+kldstat /sbin/kldstat 1fbda7133276e49383e9bd99d89f08de
+kldunload /sbin/kldunload 13b4ed16b15dd21ecb03820bd4ef25be
+cc /usr/bin/cc d28bb7f6edb0f25a920bc1aa35993b62
+ps /bin/ps 13bafab635fa70f8bb1bc5d1de613c1d
+dmesg /sbin/dmesg d5b0c809a0616bdd96f344fd55dbf14c
+grep /usr/bin/grep 1b6ff1537b8572a81498e8259b1ff35c
+file /usr/bin/file 9b0a8397af546e1af2f1bb356d8c7b62

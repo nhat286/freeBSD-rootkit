@@ -1,2 +1,10 @@
 #!/bin/sh
 
+# We check if cc has been executed before our script was run
+# Since most groups will use cc to compile their LKM's 
+# If the Access time != Modified time && Access time != create time
+# Most likely a rootkit was installed
+
+
+
+
