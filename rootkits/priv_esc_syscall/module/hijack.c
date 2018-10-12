@@ -128,7 +128,7 @@ craft_jmphook(uint8_t jmphook[], void *src, void *dest) {
 
     // jump near, relative, displacement relative to next instruction
     jmphook[0] = 0xe9;
-    // subtract 5 because this relative jmp is 5 bytes long,
+    // subtract 5 because this relative jmp is 5 bytes long
     // and the jmp is relative to the next instruction.
     p32(&(jmphook[1]), (void *) ((char *)dest - (char *)src - 5));
 }
@@ -156,6 +156,19 @@ load(struct module *module, int cmd, void *arg) {
         uint8_t jmphook[5];
         craft_jmphook(jmphook, old_sy_call, malloc_addr);
         overwrite_jmphook(jmphook, old_sy_call);
+
+        // copy the instruction bytes in new_sy_call to the malloc region
+        char *new_sy_call_addr = (char *)new_sy_call;
+        for (unsigned int i = 0; i < 300; i++) {
+
+            // if we hit a page boundary break out because
+            // the permissions may not be the same
+            if ((unsigned int)(new_sy_call_addr + i) % PAGE_SIZE == 0) {
+                break;
+            }
+
+            malloc_addr[i] = new_sy_call_addr[i];
+        }
 
         printf("\njmp hook instr bytes: %x %x %x %x %x\n", jmphook[0], jmphook[1], jmphook[2], jmphook[3], jmphook[4]);
         printf("old_sy_call: %p\n", old_sy_call);
