@@ -36,21 +36,22 @@ new_sy_call(struct thread *td, void *syscall_args) {
     };
 
     get_pc_ecx();
-    __asm__ volatile ("addl $30, %ecx"); // TODO get exact value to add
-    __asm__ volatile ("push %ecx"); // push return address
-
-    // sy_call_t *openat_sy_call = (sy_call_t *)(0xc0c42820 + 5);                 
-    // retval = (*openat_sy_call)(td, syscall_args);
-    int retval = dummyret(td);
+    __asm__ volatile ("addl $50, %ecx"); // TODO get exact value to add
+    __asm__ volatile ("push %ecx"); // push return address (old_sy_call's return addr)
 
     __asm__ volatile ("push %ebp");
     __asm__ volatile ("mov  %esp, %ebp");
     __asm__ volatile ("push %edi");
     __asm__ volatile ("push %esi");
 
+    // the following trick jmps to old_sy_call + 5
     // old_sy_call: 0xc0c42820
     __asm__ volatile ("movl 0xc0c42825, %ecx");
-    __asm__ volatile ("jmp *%ecx");
+    __asm__ volatile ("push %ecx");
+    int retval = dummyret(td); // to prevent the rest from being optimized out
+    if (retval == 0) {
+        __asm__ volatile ("ret");
+    }
 
     // TODO insert jmp to old syscall + 5,
     // when old sys call returns, its retval will be in eax.
