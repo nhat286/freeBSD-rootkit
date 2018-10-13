@@ -88,20 +88,37 @@ if [ ! -f $LOG ]; then touch $LOG && chmod 777 $LOG; fi
     fi
 
 ### STAGE 4 ###
+    ps ax | grep -v grep | grep STAGE5 > /dev/null
 
-    echo "Executing Stage 4 [Final Stage]" >> $LOG
-    sh ./stage4.sh
-    RESULT=$?
+    if [ $? -eq 1 ]
+    then 
+        echo "Executing Stage 4 [Final Stage]" >> $LOG
+        sh ./stage4.sh
+        RESULT=$?
 
-    echo "Killing all present daemons to reset script" | tee $LOG
+        # set stage5 daemon to signal stage4 complete [REBOOT persistence]
+        cmd="daemon -f -t STAGE5 -r sleep 1000"
+        echo "$cmd" >> $PERSIST
+        eval "$cmd"
+        
+        # return result of this stage
+       echo -e "==== END OF DETECTION ====\n Rerun again to cleanup and start again !"  
+       exit $RESULT
+    fi 
+
+
+### CLEANUP ###
+
+    echo "[!] Removing persistence file" | tee -a $LOG
+    rm -f $PERSIST 
 
     # kill all daemons after complete 
-    killall daemon || echo "Failed to kill off daemons" | tee $LOG 
+    echo "[!] Killing all present daemons to reset script" | tee -a $LOG
+    killall daemon || echo "[! ! !] Failed to kill off daemons" | tee -a $LOG 
 
-    echo "Saving progress to pogress.log.bk" | tee $LOG
+    echo "[!] Saving progress to pogress.log.bk" | tee -a $LOG
     cp $LOG "/tmp/progress.log.bk"
-    echo "Cleaning log now ..."
-    echo "" > $LOG 
+    echo "[!] Cleaning log now ..." && echo "" > $LOG 
 
-    exit $RESULT
+    echo "[!] Finished."
 
