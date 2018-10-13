@@ -6,7 +6,7 @@
 //
 // NOTE XXX because the syscall function pointer is redirected to point
 // to the module's function, which resides in the module's memory pages,
-// when the module is unloaded, these pages can be swapped out at
+// when the module is unloaded, these pages can be paged out at
 // anytime by the kernel. this means that it is desirable to restore
 // the old sys call when the module is loaded (to prevent the
 // system from becoming unstable when testing rootkit detection).
