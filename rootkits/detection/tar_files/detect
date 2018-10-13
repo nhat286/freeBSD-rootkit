@@ -1,8 +1,13 @@
 #!/bin/sh
 
+if [ `id -u` -ne 0 ]; then echo "Please run script as root or with sudo." && exit 1 ; fi
+
 # Dispatcher script, for individual stages of detection checkout the stage?.sh files
 PERSIST="/usr/local/etc/rc.d/STARTUP.sh"
 LOG="/tmp/progress.log"
+
+echo "Checking log ..."
+if [ ! -f $LOG ]; then touch $LOG && chmod 777 $LOG; fi
 
 ### STAGE 0 ###
     ps ax | grep -v grep | grep STAGE1 > /dev/null
@@ -28,13 +33,17 @@ LOG="/tmp/progress.log"
     if [ $? -eq 1 ]
     then
         echo "Executing Stage 1" >> $LOG
-        sh ./stage0.sh
+        sh ./stage1.sh
         RESULT=$?
 
-        # set stage1 daemon to signal stage 0 complete [REBOOT persistence]
-        cmd="daemon -f -t STAGE1 -r sleep 1000"
+        # set stage2 daemon to signal stage 1 complete [REBOOT persistence]
+        cmd="daemon -f -t STAGE2 -r sleep 1000"
         echo "$cmd" >> $PERSIST
         eval "$cmd"
+
+        # save log before reboot
+        cp $LOG /etc/.progress.log
+        echo "mv /etc/.progress.log $LOG || echo 'couldn't find/move log file'" >> $PERSIST
 
         # return the result of this stage (0 or 1)
         exit $RESULT
@@ -43,15 +52,56 @@ LOG="/tmp/progress.log"
 # >>> VM is rebooted after this stage <<< #
 
 ### STAGE 2 ###
-    # if stage3 daemon is not present, enter here
+    ps ax | grep -v grep | grep STAGE3 > /dev/null
+    # If stage3 daemon is not present, enter here
+    if [ $? -eq 1 ]
+    then
+        echo "Executing Stage 2" >> $LOG
+        sh ./stage2.sh
+        RESULT=$?
 
-    # set stage3 daemon to signal stage 2 complete [REBOOT persistence] 
+        # set stage3 daemon to signal stage 2 complete [REBOOT persistence]
+        cmd="daemon -f -t STAGE3 -r sleep 1000"
+        echo "$cmd" >> $PERSIST
+        eval "$cmd"
+
+        # return the result of this stage (0 or 1)
+        exit $RESULT
+    fi
 
 ### STAGE 3 ###
-    # if stage4 daemon is not present, enter here
+    ps ax | grep -v grep | grep STAGE4 > /dev/null
+    # If stage4 daemon is not present, enter here
+    if [ $? -eq 1 ]
+    then
+        echo "Executing Stage 3" >> $LOG
+        sh ./stage3.sh
+        RESULT=$?
 
-    # set stage4 daemon to signal stage 3 complete [REBOOT persistence] 
+        # set stage4 daemon to signal stage 3 complete [REBOOT persistence]
+        cmd="daemon -f -t STAGE4 -r sleep 1000"
+        echo "$cmd" >> $PERSIST
+        eval "$cmd"
+
+        # return the result of this stage (0 or 1)
+        exit $RESULT
+    fi
 
 ### STAGE 4 ###
-    
+
+    echo "Executing Stage 4 [Final Stage]" >> $LOG
+    sh ./stage4.sh
+    RESULT=$?
+
+    echo "Killing all present daemons to reset script" | tee $LOG
+
     # kill all daemons after complete 
+    killall daemon || echo "Failed to kill off daemons" | tee $LOG 
+
+    echo "Saving progress to pogress.log.bk" | tee $LOG
+    cp $LOG "/tmp/progress.log.bk"
+    echo "Cleaning log now ..."
+    echo "" > $LOG 
+
+    exit $RESULT
+

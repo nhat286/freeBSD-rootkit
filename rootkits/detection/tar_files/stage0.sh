@@ -11,7 +11,7 @@ PERSIST="/usr/local/etc/rc.d/STARTUP.sh"
 if [ ! -x $PERSIST ]
 then
     echo "Creating persistence file ..."  >> /tmp/progress.log
-    echo "#!/bin/sh" >> $PERSIST && chmod 711 $PERSIST
+    echo "#!/bin/sh" >> $PERSIST && chmod 755 $PERSIST
 else
     echo "Persistence file already exists ..." >> /tmp/progress.log
 fi
