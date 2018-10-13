@@ -64,6 +64,10 @@ port_checker(struct thread *td, void *syscall_args)
 	//struct port_hiding_args *uap;
 	//uap = (struct port_hiding_args *)syscall_args;
 
+    // from tcp_var.h 
+    // VNET_DECLARE(struct inpcbhead, tcb);
+    // VNET_DECLARE(struct inpcbinfo, tcbinfo);
+
 	struct inpcb *inpb;
     struct inpcbport *inpbport;
     int untrusted_count = 0;
@@ -72,11 +76,22 @@ port_checker(struct thread *td, void *syscall_args)
     // we iterate through ipi_listhead and get the supposed number of open ports
 	INP_INFO_WLOCK(&tcbinfo);
 
+    /*
+      LIST_FOREACH(TYPE *var,   LIST_HEAD *head,  LIST_ENTRY NAME);
+        - in this case ipi_listhead is the HEAD of the list
+        - inpb is the var provided for referrence and TYPE 
+        - the list to be iterated over (in this case inp_list)
+     */
+
+    // what confuses me is that in the struct inpcb theres ref. to inp_list (CK_LIST_ENTRY)
+    //      as well as an inpcbinfo struct 
+    // in inpcbinfo theres also ref. to inp_list  and the listhead itself 
+    //      so is inpcbinfo first or last ?? 
 	LIST_FOREACH(inpb, tcbinfo.ipi_listhead, inp_list) {
         untrusted_count++;
     }
 
-    INP_HASH_RLOCK(&tcbinfo);
+    //INP_HASH_RLOCK(&tcbinfo);
     LIST_FOREACH(inpb, tcbinfo.ipi_hashbase, inp_hash) {
         hashbase_count++;
     }
@@ -86,7 +101,7 @@ port_checker(struct thread *td, void *syscall_args)
         porthash_count++;
     }
 
-    INP_HASH_RUNLOCK(&tcbinfo);
+    //INP_HASH_RUNLOCK(&tcbinfo);
 	INP_INFO_WUNLOCK(&tcbinfo);
 
     //wtf is a hashmask
