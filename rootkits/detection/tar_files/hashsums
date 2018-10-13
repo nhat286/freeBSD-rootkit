@@ -8,3 +8,4 @@ ps /bin/ps 13bafab635fa70f8bb1bc5d1de613c1d
 dmesg /sbin/dmesg d5b0c809a0616bdd96f344fd55dbf14c
 grep /usr/bin/grep 1b6ff1537b8572a81498e8259b1ff35c
 file /usr/bin/file 9b0a8397af546e1af2f1bb356d8c7b62
+kernel /boot/kernel/kernel 2e1e5ecbe821d840b2f9f38548997d11

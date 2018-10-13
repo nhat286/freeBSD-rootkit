@@ -1,4 +1,5 @@
 #!/bin/sh
+# This script will run right after rookit installation, pre-escalation
 
 DETECTED=1  # exit $DETECTED to exit 1 
 CLEAN=0
@@ -19,11 +20,22 @@ fi
 # ===== check Access time of /usr/bin/cc ====
 # Since most groups will use cc to compile their LKM's 
 # most likely a rootkit was installed
-access=`stat -f "%Sa|%SB" -n | cut -d\| -f1`
-birth=`stat -f "%Sa|%SB"  -n | cut -d\| -f2`
+access=`stat -f "%Sa|%SB" -n /usr/bin/cc | cut -d\| -f1`
+birth=`stat -f "%Sa|%SB"  -n /usr/bin/cc | cut -d\| -f2`
 
 # check for access and birth time mismatch
 [ "$access" != "$birth" ] && echo -e "cc has been executed recently\t[!]" && SCORE=$((SCORE += 1))
+
+# ==== check Access time of /bin/rm ====
+# Most groups will clean up their files after installation
+# if they use the system rm instead of their own rm it will get updated
+# most likely a rootkit was installed
+
+access=`stat -f "%Sa|%SB" -n '/bin/rm' | cut -d\| -f1`
+birth=`stat -f "%Sa|%SB"  -n '/bin/rm' | cut -d\| -f2`
+
+# check for access and birth time mismatch
+[ "$access" != "$birth" ] && echo -e "rm has been executed recently\t[!]" && SCORE=$((SCORE += 1))
 
 
 # ==== run hashsum checks on binaries ====
@@ -55,5 +67,12 @@ done < hashsums
 
 # ==== if stage one: run daemonized ktrace / truss to listen for syscalls and suspicious strings
 # ==== if stage two: collect results and analyse ====
+
+# ===== preserve access times of whoami , id, and ls ====
+echo "Storing access times of whoami, id, and ls in /tmp"
+rm -f /tmp/preserve
+echo "ls#`stat -f "%Sa" -n '/bin/ls'`" >> /tmp/preserve
+echo "id#`stat -f "%Sa" -n '/usr/bin/id'`" >> /tmp/preserve
+echo "whoami#`stat -f "%Sa" -n '/usr/bin/whoami'`" >> /tmp/preserve
 
 echo -e "===================\nRootkit Score: $SCORE/10\n==================="
