@@ -10,7 +10,7 @@
 // array of addresses of syscall handler functions.
 // because there is no KASLR and because the syscall table is
 // initialized during boot, the addresses will always be the same.
-sy_call_t *sy_call_addresses[SYS_MAXSYSCALL] = {
+static sy_call_t *sy_call_addresses[SYS_MAXSYSCALL] = {
     (sy_call_t *)0xc0b93470,
     (sy_call_t *)0xc0b50430,
     (sy_call_t *)0xc0b542d0,
