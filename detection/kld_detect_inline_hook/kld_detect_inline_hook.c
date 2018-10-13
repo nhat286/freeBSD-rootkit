@@ -8,7 +8,7 @@
 #include <sys/sysent.h>
 
 // the instruction bytes that are common to all syscall function prologues.
-static char common_function_prologue[3] = {
+static char common_function_prologue[] = {
 
     0x55,               // push   ebp
     0x89, 0xe5          // mov    ebp,esp
@@ -22,6 +22,38 @@ static char common_function_prologue[3] = {
     // 0x8b, 0x75, 0x08    // mov    esi,DWORD PTR [ebp+0x8]
 };
 
+// instruction bytes that redirect execution.
+static char redirect_instructions[] = {
+
+    // jmp
+    0xeb,
+    0xe9,
+    0xea,
+
+    // call
+    0xe8,
+    0x9a,
+
+    // call or jmp
+    0xff,
+
+    // ret
+    0xc3,
+    0xcb,
+    0xc2,
+    0xca
+};
+
+static int
+isRedirect(char instr) {
+    for (unsigned int i = 0; i < sizeof(redirect_instructions)/sizeof(char); i++) {
+        if (instr == redirect_instructions[i]) {
+            return (1);
+        }
+    }
+    return (0);
+}
+
 // function that is called when the module is loaded and unloaded.
 static int
 load(struct module *module, int cmd, void *arg) {
@@ -34,10 +66,22 @@ load(struct module *module, int cmd, void *arg) {
         for (unsigned int i = 0; i < SYS_MAXSYSCALL; i++) {
             char *sy_call = (char *)sysent[i].sy_call;
 
-            for (unsigned int j = 0; j < 3; j++) {
+            for (unsigned int j = 0; j < sizeof(common_function_prologue)/sizeof(char); j++) {
                 if (sy_call[j] != common_function_prologue[j]) {
                     return (1);
                 }
+            }
+
+            // since the 0th instr is always "push ebp" (instr byte: 0x55)
+            // and the 1st instr is always "mov ebp, esp" (instr byte: 0x89 0xe5)
+            // for all of the syscall function prologues,
+            // it is only possible for us to check the 0th, 1st, and 3rd bytes
+            // to see if they are redirect instructions. the rest of the
+            // bytes cannot be easily checked reliably.
+            if (isRedirect(sy_call[0]) ||
+                    isRedirect(sy_call[1]) ||
+                    isRedirect(sy_call[3])) {
+                return (1);
             }
         }
 
