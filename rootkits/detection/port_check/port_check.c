@@ -1,3 +1,6 @@
+// make 
+// sudo kldunload port_check.ko && sudo kldload ./port_check.ko && perl -e 'syscall(211);' && dmesg
+
 /*-
  * Copyright (c) 2007 Joseph Kong.
  * All rights reserved.
@@ -62,38 +65,50 @@ port_checker(struct thread *td, void *syscall_args)
 	//uap = (struct port_hiding_args *)syscall_args;
 
 	struct inpcb *inpb;
+    struct inpcbport *inpbport;
     int untrusted_count = 0;
+    int hashbase_count = 0;
+    int porthash_count = 0;
     // we iterate through ipi_listhead and get the supposed number of open ports
 	INP_INFO_WLOCK(&tcbinfo);
 
 	LIST_FOREACH(inpb, tcbinfo.ipi_listhead, inp_list) {
         untrusted_count++;
     }
-	/* Iterate through the TCP-based inpcb list. */
-    /*
-	LIST_FOREACH(inpb, tcbinfo.ipi_listhead, inp_list) {
-		if (inpb->inp_vflag & INP_TIMEWAIT)
-			continue;
 
-		INP_WLOCK(inpb);
+    INP_HASH_RLOCK(&tcbinfo);
+    LIST_FOREACH(inpb, tcbinfo.ipi_hashbase, inp_hash) {
+        hashbase_count++;
+    }
 
-		// Do we want to hide this local open port?
-		if (uap->lport == ntohs(inpb->inp_inc.inc_ie.ie_lport))
-			LIST_REMOVE(inpb, inp_list);
+    //ipi_porthashbase
+    LIST_FOREACH(inpbport, tcbinfo.ipi_porthashbase, phd_hash) {
+        porthash_count++;
+    }
 
-        // newer version now specifies read/write locks, we just take write
-		INP_WUNLOCK(inpb);
-	}
-    */
+    INP_HASH_RUNLOCK(&tcbinfo);
 	INP_INFO_WUNLOCK(&tcbinfo);
 
-    //print out this count
+    //wtf is a hashmask
+    printf("HASHMASK: %lu\n", tcbinfo.ipi_hashmask);
+
+    // print out this count
     printf("Untrusted inp_list count: %d\n", untrusted_count);
 
-    
-    // Now get ipi_count
+    //orint out gencount
+    printf("Generation count: %llu\n", tcbinfo.ipi_gencnt);
+
+    // now get ipi_count
     printf("ipi_count var says: %d\n", tcbinfo.ipi_count);
 
+    // now get hashbase
+    printf("hashbase_count says: %d\n", hashbase_count);
+
+    // now get porthashbase
+    printf("porthashbase_count says: %d\n", porthash_count);
+
+
+    // ALL THESE lengths / size should line up 
 	return(0);
 }
 
