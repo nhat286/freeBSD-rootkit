@@ -7,18 +7,26 @@
 #include <sys/syscall.h>
 #include <sys/sysent.h>
 
-static char function_prologue[] = {
+// the instruction bytes that are common to all syscall function prologues.
+static char common_function_prologue[3] = {
+
     0x55,               // push   ebp
-    0x89, 0xe5,         // mov    ebp,esp
-    0x57,               // push   edi
-    0x56,               // push   esi
-    0x8b, 0x7d, 0x0c,   // mov    edi,DWORD PTR [ebp+0xc]
-    0x8b, 0x75, 0x08,   // mov    esi,DWORD PTR [ebp+0x8]
+    0x89, 0xe5          // mov    ebp,esp
+
+    // the instructions below are not necessarily the same
+    // for all syscall function prologues.
+    //
+    // 0x57,               // push   edi
+    // 0x56,               // push   esi
+    // 0x8b, 0x7d, 0x0c,   // mov    edi,DWORD PTR [ebp+0xc]
+    // 0x8b, 0x75, 0x08    // mov    esi,DWORD PTR [ebp+0x8]
 };
 
 // function that is called when the module is loaded and unloaded.
 static int
 load(struct module *module, int cmd, void *arg) {
+
+    (void) common_function_prologue;
 
     switch (cmd) {
     case MOD_LOAD: {
@@ -26,8 +34,8 @@ load(struct module *module, int cmd, void *arg) {
         for (unsigned int i = 0; i < SYS_MAXSYSCALL; i++) {
             char *sy_call = (char *)sysent[i].sy_call;
 
-            for (unsigned int j = 0; j < sizeof(function_prologue); j++) {
-                if (sy_call[j] != function_prologue[j]) {
+            for (unsigned int j = 0; j < 3; j++) {
+                if (sy_call[j] != common_function_prologue[j]) {
                     return (1);
                 }
             }
