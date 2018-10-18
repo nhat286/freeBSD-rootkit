@@ -8,13 +8,13 @@
 #include <sys/lock.h>
 #include <sys/sx.h>
 
-// returns 1 if  each proc in the allproc list is in the pidhashtbl.
+// returns 1 if each proc in the allproc list is in the pidhashtbl.
 // returns 0 otherwise.
 static int
 allproc_in_pidhashtbl() {
 
     struct proc *p;
-    sx_slock(&allproc_lock);
+    sx_xlock(&allproc_lock);
     FOREACH_PROC_IN_SYSTEM(p) {
         PROC_LOCK(p);
 
@@ -31,7 +31,7 @@ allproc_in_pidhashtbl() {
         // check that each proc in the allproc list is in the pidhashtbl
         struct proc *found = NULL;
         LIST_FOREACH(found, PIDHASH(p->p_pid), p_hash) {
-            if (found->p_pid == p->p_pid) {
+            if (found != NULL && found->p_pid == p->p_pid) {
                 // XXX
                 // it might be possible that rootkit processes may hide themselves
                 // from being probed by setting their p_state to PRS_NEW.
@@ -50,7 +50,7 @@ allproc_in_pidhashtbl() {
         PROC_UNLOCK(p);
     }
     
-    sx_sunlock(&allproc_lock);
+    sx_xunlock(&allproc_lock);
     return (0);
 }
 
