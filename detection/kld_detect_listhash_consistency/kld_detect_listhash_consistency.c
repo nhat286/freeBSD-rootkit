@@ -7,6 +7,7 @@
 #include <sys/mutex.h>
 #include <sys/lock.h>
 #include <sys/sx.h>
+#include <machine/atomic.h>
 
 #define TRUE 1
 #define FALSE 0
@@ -16,8 +17,8 @@
 static int
 allproc_in_pidhashtbl() {
 
-    struct proc *p;
     sx_xlock(&allproc_lock);
+    struct proc *p;
     FOREACH_PROC_IN_SYSTEM(p) {
         PROC_LOCK(p);
 
@@ -27,9 +28,9 @@ allproc_in_pidhashtbl() {
         // it might be possible that rootkit processes may hide themselves
         // from being probed by setting their p_state to PRS_NEW.
         if (p->p_state == PRS_NEW) {
-			PROC_UNLOCK(p);
-			continue;
-		}
+            PROC_UNLOCK(p);
+            continue;
+        }
 
         // check that each proc in the allproc list is in the pidhashtbl
         int isFound = FALSE;
@@ -125,9 +126,9 @@ pidhashtbl_in_allproc() {
                         // it might be possible that rootkit processes may hide themselves
                         // from being probed by setting their p_state to PRS_NEW.
                         if (found->p_state == PRS_NEW) {
-		                	PROC_UNLOCK(found);
-		                	continue;
-		                }
+                            PROC_UNLOCK(found);
+                            continue;
+                        }
                         if (found->p_pid == i) {
                             isFound = TRUE;
                             // XXX the currently held lock of the process *must* be
@@ -169,6 +170,79 @@ pidhashtbl_in_allproc() {
     return (TRUE);
 }
 
+// returns TRUE if nprocs is consistent with the number of procs in
+// the allproc list, zombproc list, and pidhashtbl.
+// the following should hold true:
+//      nprocs == allproc + zombproc
+//      nprocs == pidhashtbl entries + zombproc
+// returns FALSE otherwise.
+static int
+nprocs_consistent() {
+
+    sx_xlock(&allproc_lock);
+
+    pid_t n_allprocs = 0;
+    struct proc *p;
+
+    FOREACH_PROC_IN_SYSTEM(p) {
+        PROC_LOCK(p);
+        // if the process is currently being created,
+        // it may not have been completely initialized yet.
+        // XXX
+        // it might be possible that rootkit processes may hide themselves
+        // from being probed by setting their p_state to PRS_NEW.
+        if (p->p_state == PRS_NEW) {
+            PROC_UNLOCK(p);
+            continue;
+        }
+        n_allprocs++;
+        PROC_UNLOCK(p);
+    }
+
+    pid_t n_zombprocs = 0;
+    LIST_FOREACH(p, &zombproc, p_list) {
+        n_zombprocs++;
+    }
+
+    if (n_allprocs + n_zombprocs != nprocs) {
+        sx_xunlock(&allproc_lock);
+        return (FALSE);
+    }
+
+    pid_t n_pidhashtbl = 0;
+    for (pid_t i = 0; i <= pid_max; i++) {
+        LIST_FOREACH(p, PIDHASH(i), p_hash) {
+
+            if (p != NULL) {
+                PROC_LOCK(p);
+
+                if (p->p_pid == i) {
+                    // if the process is currently being created,
+                    // it may not have been completely initialized yet.
+                    // XXX
+                    // it might be possible that rootkit processes may hide themselves
+                    // from being probed by setting their p_state to PRS_NEW.
+                    if (p->p_state == PRS_NEW) {
+                        PROC_UNLOCK(p);
+                        continue;
+                    }
+                    n_pidhashtbl++;
+                }
+
+                PROC_UNLOCK(p);
+            }
+        }
+    }
+
+    if (n_pidhashtbl + n_zombprocs != nprocs) {
+        sx_xunlock(&allproc_lock);
+        return (FALSE);
+    }
+
+    sx_xunlock(&allproc_lock);
+    return (TRUE);
+}
+
 // function that is called when the module is loaded and unloaded.
 static int
 load(struct module *module, int cmd, void *arg) {
@@ -186,6 +260,12 @@ load(struct module *module, int cmd, void *arg) {
         }
 
         err = pidhashtbl_in_allproc();
+        if (err == FALSE) {
+            ret = 1;
+            break;
+        }
+
+        err = nprocs_consistent();
         if (err == FALSE) {
             ret = 1;
             break;
