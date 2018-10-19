@@ -243,6 +243,46 @@ nprocs_consistent() {
     return (TRUE);
 }
 
+// returns TRUE if the actual number of threads in each proc is consistent
+// with the p_numthreads field in the proc.
+// returns FALSE otherwise.
+static int
+nthreads_consistent() {
+
+    sx_xlock(&allproc_lock);
+
+    struct proc *p;
+    FOREACH_PROC_IN_SYSTEM(p) {
+        PROC_LOCK(p);
+        // if the process is currently being created,
+        // it may not have been completely initialized yet.
+        // XXX
+        // it might be possible that rootkit processes may hide themselves
+        // from being probed by setting their p_state to PRS_NEW.
+        if (p->p_state == PRS_NEW) {
+            PROC_UNLOCK(p);
+            continue;
+        }
+
+        int numthreads = 0;
+        struct thread *td;
+        FOREACH_THREAD_IN_PROC(p, td) {
+            numthreads++;
+        }
+
+        if (numthreads != p->p_numthreads) {
+            PROC_UNLOCK(p);
+            sx_xunlock(&allproc_lock);
+            return (FALSE);
+        }
+
+        PROC_UNLOCK(p);
+    }
+
+    sx_xunlock(&allproc_lock);
+    return (TRUE);
+}
+
 // function that is called when the module is loaded and unloaded.
 static int
 load(struct module *module, int cmd, void *arg) {
@@ -266,6 +306,12 @@ load(struct module *module, int cmd, void *arg) {
         }
 
         err = nprocs_consistent();
+        if (err == FALSE) {
+            ret = 1;
+            break;
+        }
+
+        err = nthreads_consistent();
         if (err == FALSE) {
             ret = 1;
             break;
