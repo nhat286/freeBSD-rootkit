@@ -362,6 +362,19 @@ allthreads_in_tidhashtbl() {
     return (TRUE);
 }
 
+static void
+print_bits(unsigned int num) {
+    for (unsigned int mask = 1u << 31; mask != 0; mask >>= 1) {
+        if (num & mask) {
+            printf("1");
+        } else {
+            printf("0");
+        }
+    }
+    printf("\n");
+}
+
+
 static int
 threads_in_runq_consistent() {
 
@@ -373,43 +386,57 @@ threads_in_runq_consistent() {
     // running and interfering with our operations.
     mtx_lock_spin(thread0.td_lock);
 
-#define	TS_NAME_LEN (MAXCOMLEN + sizeof(" td ") + sizeof(__XSTRING(UINT_MAX)))
-    struct td_sched {
-    	fixpt_t		ts_pctcpu;	/* %cpu during p_swtime. */
-    	u_int		ts_estcpu;	/* Estimated cpu utilization. */
-    	int		ts_cpticks;	/* Ticks of cpu time. */
-    	int		ts_slptime;	/* Seconds !RUNNING. */
-    	int		ts_slice;	/* Remaining part of time slice. */
-    	int		ts_flags;
-    	struct runq	*ts_runq;	/* runq the thread is currently on */
-#ifdef KTR
-    	char		ts_name[TS_NAME_LEN];
-#endif /* KTR */
-    };
+    // struct td_sched {
+    //     fixpt_t		ts_pctcpu;	/* %cpu during p_swtime. */
+    //     u_int		ts_estcpu;	/* Estimated cpu utilization. */
+    //     int		ts_cpticks;	/* Ticks of cpu time. */
+    //     int		ts_slptime;	/* Seconds !RUNNING. */
+    //     int		ts_slice;	/* Remaining part of time slice. */
+    //     int		ts_flags;
+    //     struct runq	*ts_runq;	/* runq the thread is currently on */
+    // #ifdef KTR
+    // #define	TS_NAME_LEN (MAXCOMLEN + sizeof(" td ") + sizeof(__XSTRING(UINT_MAX)))
+    //     char		ts_name[TS_NAME_LEN];
+    // #endif /* KTR */
+    // };
 
     thread_lock(curthread);
-    struct td_sched *ts = (struct td_sched *)td_get_sched(curthread);
-    struct runq *runq = ts->ts_runq;
-    struct rqbits *rqb = &(runq->rq_status);
+    char *ts = (char *)td_get_sched(curthread);
+    struct runq *runq = (struct runq *) &(ts[24]);
+    struct rqbits *rqb = &runq->rq_status;
     thread_unlock(curthread);
 
-    for (unsigned int rqnum = 0; rqnum < RQ_NQS; rqnum++) {
+    if (rqb == NULL) {
+        printf("rqb null\n");
+    }
+    // printf("***********************\n");
+    // printf("***********************\n");
+    // printf("***********************\n");
+    // printf("struct td_sched *ts is: %p\n", ts);
+    // printf("struct runq *runq address is: %p\n", runq);
+    // printf("struct rqbits *rqb address is: %p\n", rqb);
+    for (int rqnum = 0; rqnum < RQ_NQS; rqnum++) {
+
+        // printf("RQB_WORD is: %d\n", RQB_WORD(rqnum));
+        // printf("RQB_BIT is: ");
+        // print_bits(RQB_BIT(rqnum));
 
         // only check the threads in that runq if the runq is not empty.
         if (rqb->rqb_bits[RQB_WORD(rqnum)] & RQB_BIT(rqnum)) {
 
-            struct rqhead *rqhead = &(runq->rq_queues[rqnum]);
-            struct thread *td = NULL;
-            // TAILQ_FOREACH(TYPE *var, TAILQ_HEAD *head, TAILQ_ENTRY NAME);
-            TAILQ_FOREACH(td, rqhead, td_runq) {
-                thread_lock(td);
+            // struct rqhead *rqhead = &(runq->rq_queues[rqnum]);
+            // struct thread *td = NULL;
+            // // TAILQ_FOREACH(TYPE *var, TAILQ_HEAD *head, TAILQ_ENTRY NAME);
+            // TAILQ_FOREACH(td, rqhead, td_runq) {
+            //     thread_lock(td);
 
-                if (td != NULL) {
-                    printf("x ");
-                }
+            //     if (td != NULL) {
+            //         printf("x ");
+            //     }
 
-                thread_unlock(td);
-            }
+            //     thread_unlock(td);
+            // }
+            printf("bla \n");
         }
     }
 
