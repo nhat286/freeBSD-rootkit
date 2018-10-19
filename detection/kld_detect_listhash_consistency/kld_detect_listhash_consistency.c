@@ -7,6 +7,7 @@
 #include <sys/mutex.h>
 #include <sys/lock.h>
 #include <sys/sx.h>
+#include <sys/runq.h>
 #include <sys/rwlock.h>
 
 #define TRUE 1
@@ -361,6 +362,65 @@ allthreads_in_tidhashtbl() {
     return (TRUE);
 }
 
+static int
+threads_in_runq_consistent() {
+
+#ifndef SMP
+
+    // according to /sys/kern/sched_4bsd.c,
+    // the td_lock of thread0 of proc0 (the scheduler proc) is the sched lock.
+    // acquiring the sched lock should prevent proc0/the scheduler from
+    // running and interfering with our operations.
+    mtx_lock_spin(thread0.td_lock);
+
+#define	TS_NAME_LEN (MAXCOMLEN + sizeof(" td ") + sizeof(__XSTRING(UINT_MAX)))
+    struct td_sched {
+    	fixpt_t		ts_pctcpu;	/* %cpu during p_swtime. */
+    	u_int		ts_estcpu;	/* Estimated cpu utilization. */
+    	int		ts_cpticks;	/* Ticks of cpu time. */
+    	int		ts_slptime;	/* Seconds !RUNNING. */
+    	int		ts_slice;	/* Remaining part of time slice. */
+    	int		ts_flags;
+    	struct runq	*ts_runq;	/* runq the thread is currently on */
+#ifdef KTR
+    	char		ts_name[TS_NAME_LEN];
+#endif /* KTR */
+    };
+
+    thread_lock(curthread);
+    struct td_sched *ts = (struct td_sched *)td_get_sched(curthread);
+    struct runq *runq = ts->ts_runq;
+    struct rqbits *rqb = &(runq->rq_status);
+    thread_unlock(curthread);
+
+    for (unsigned int rqnum = 0; rqnum < RQ_NQS; rqnum++) {
+
+        // only check the threads in that runq if the runq is not empty.
+        if (rqb->rqb_bits[RQB_WORD(rqnum)] & RQB_BIT(rqnum)) {
+
+            struct rqhead *rqhead = &(runq->rq_queues[rqnum]);
+            struct thread *td = NULL;
+            // TAILQ_FOREACH(TYPE *var, TAILQ_HEAD *head, TAILQ_ENTRY NAME);
+            TAILQ_FOREACH(td, rqhead, td_runq) {
+                thread_lock(td);
+
+                if (td != NULL) {
+                    printf("x ");
+                }
+
+                thread_unlock(td);
+            }
+        }
+    }
+
+    // release the scheduler lock.
+    mtx_unlock_spin(thread0.td_lock);
+
+#endif /* SMP */
+
+    return (TRUE);
+}
+
 // function that is called when the module is loaded and unloaded.
 static int
 load(struct module *module, int cmd, void *arg) {
@@ -396,6 +456,12 @@ load(struct module *module, int cmd, void *arg) {
         }
 
         err = allthreads_in_tidhashtbl();
+        if (err == FALSE) {
+            ret = 1;
+            break;
+        }
+
+        err = threads_in_runq_consistent();
         if (err == FALSE) {
             ret = 1;
             break;
