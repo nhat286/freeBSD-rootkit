@@ -7,7 +7,7 @@
 #include <sys/mutex.h>
 #include <sys/lock.h>
 #include <sys/sx.h>
-#include <machine/atomic.h>
+#include <sys/rwlock.h>
 
 #define TRUE 1
 #define FALSE 0
@@ -18,7 +18,7 @@ static int
 allproc_in_pidhashtbl() {
 
     sx_xlock(&allproc_lock);
-    struct proc *p;
+    struct proc *p = NULL;
     FOREACH_PROC_IN_SYSTEM(p) {
         PROC_LOCK(p);
 
@@ -97,7 +97,7 @@ pidhashtbl_in_allproc() {
     sx_xlock(&allproc_lock);
     for (pid_t i = 0; i <= pid_max; i++) {
 
-        struct proc *p;
+        struct proc *p = NULL;
         LIST_FOREACH(p, PIDHASH(i), p_hash) {
             if (p != NULL) {
                 PROC_LOCK(p);
@@ -182,8 +182,7 @@ nprocs_consistent() {
     sx_xlock(&allproc_lock);
 
     pid_t n_allprocs = 0;
-    struct proc *p;
-
+    struct proc *p = NULL;
     FOREACH_PROC_IN_SYSTEM(p) {
         PROC_LOCK(p);
         // if the process is currently being created,
@@ -251,7 +250,7 @@ nthreads_consistent() {
 
     sx_xlock(&allproc_lock);
 
-    struct proc *p;
+    struct proc *p = NULL;
     FOREACH_PROC_IN_SYSTEM(p) {
         PROC_LOCK(p);
         // if the process is currently being created,
@@ -265,7 +264,7 @@ nthreads_consistent() {
         }
 
         int numthreads = 0;
-        struct thread *td;
+        struct thread *td = NULL;
         FOREACH_THREAD_IN_PROC(p, td) {
             numthreads++;
         }
@@ -279,6 +278,85 @@ nthreads_consistent() {
         PROC_UNLOCK(p);
     }
 
+    sx_xunlock(&allproc_lock);
+    return (TRUE);
+}
+
+// returns TRUE if all threads in each proc is in the tidhashtbl.
+// returns FALSE otherwise.
+static int
+allthreads_in_tidhashtbl() {
+
+    sx_xlock(&allproc_lock);
+    rw_rlock(&tidhash_lock);
+
+    struct proc *p = NULL;
+    FOREACH_PROC_IN_SYSTEM(p) {
+        PROC_LOCK(p);
+        // if the process is currently being created,
+        // it may not have been completely initialized yet.
+        // XXX
+        // it might be possible that rootkit processes may hide themselves
+        // from being probed by setting their p_state to PRS_NEW.
+        if (p->p_state == PRS_NEW) {
+            PROC_UNLOCK(p);
+            continue;
+        }
+
+        struct thread *td = NULL;
+        FOREACH_THREAD_IN_PROC(p, td) {
+            thread_lock(td);
+
+            int isFound = FALSE;
+            struct thread *found;
+            LIST_FOREACH(found, TIDHASH(td->td_tid), td_hash) {
+                if (found != NULL) {
+                    if (td->td_lock != found->td_lock) {
+                        thread_lock(found);
+                    }
+
+                    if (td->td_tid == found->td_tid) {
+                        isFound = TRUE;
+                        // XXX the currently held lock of the thread *must* be
+                        // released after breaking out of the foreach loop.
+                        break;
+                    }
+
+                    // if these two threads have different locks,
+                    // it means that they are different threads.
+                    // if they are different threads, then it is safe
+                    // to release the lock of found (again, found thread
+                    // is the thread we are iterating through in the threadlist
+                    // of this proc).
+                    if (td->td_lock != found->td_lock) {
+                        thread_unlock(found);
+                    // else somehow the locks of the two threads are the same
+                    // but their tids are different (because if their tids
+                    // were the same, then we would have broken out of the foreach
+                    // loop with the break statement in the if statement above).
+                    // XXX the currently held lock of the thread *must* be
+                    // released after beakinf out of this foreach loop.
+                    } else {
+                        break;
+                    }
+                }
+            }
+
+            if (isFound == FALSE) {
+                thread_unlock(td);
+                PROC_UNLOCK(p);
+                rw_runlock(&tidhash_lock);
+                sx_sunlock(&allproc_lock);
+                return (FALSE);
+            }
+
+            thread_unlock(td);
+        }
+
+        PROC_UNLOCK(p);
+    }
+
+    rw_runlock(&tidhash_lock);
     sx_xunlock(&allproc_lock);
     return (TRUE);
 }
@@ -312,6 +390,12 @@ load(struct module *module, int cmd, void *arg) {
         }
 
         err = nthreads_consistent();
+        if (err == FALSE) {
+            ret = 1;
+            break;
+        }
+
+        err = allthreads_in_tidhashtbl();
         if (err == FALSE) {
             ret = 1;
             break;
