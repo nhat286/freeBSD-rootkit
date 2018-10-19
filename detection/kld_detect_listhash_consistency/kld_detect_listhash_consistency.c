@@ -29,19 +29,50 @@ allproc_in_pidhashtbl() {
 		}
 
         // check that each proc in the allproc list is in the pidhashtbl
+        int isFound = 0;
         struct proc *found = NULL;
         LIST_FOREACH(found, PIDHASH(p->p_pid), p_hash) {
-            if (found != NULL && found->p_pid == p->p_pid) {
+
+            if (found != NULL) {
+                // if found == p (they are the same process),
+                // then this if check will prevent us from double locking the process.
+                if (!(PROC_LOCKED(found))) {
+                    PROC_LOCK(found);
+                }
                 // XXX
                 // it might be possible that rootkit processes may hide themselves
                 // from being probed by setting their p_state to PRS_NEW.
                 if (found->p_state == PRS_NEW) {
-                    found = NULL;
+                    PROC_UNLOCK(found);
+                    continue;
                 }
-                break;
+                if (found->p_pid == p->p_pid) {
+                    isFound = 1;
+                    // XXX the currently held lock of the process *must* be
+                    // released after breaking out of this foreach loop.
+                    break;
+                }
+                // if these two processes have different mutexes,
+                // it means that they are different processes.
+                // if they are different processes, then it is
+                // safe to release the mutex of found (again,
+                // found proc is the process we are iterating through
+                // in the allproc list).
+                if (&(p->p_mtx) != &(found->p_mtx)) {
+                    PROC_UNLOCK(found);
+                // else somehow the mutexes of the two processes are the
+                // same but their pids are different (because if their pids
+                // were the same, then we would have broken out of the foreach
+                // loop with the break statement in the if statement above).
+                // XXX the currently held lock of the process *must* be
+                // released after breaking out of this foreach loop.
+                } else {
+                    break;
+                }
             }
         }
-        if (found == NULL) {
+
+        if (isFound == 0) {
             PROC_UNLOCK(p);
             sx_sunlock(&allproc_lock);
             return (1);
@@ -50,6 +81,87 @@ allproc_in_pidhashtbl() {
         PROC_UNLOCK(p);
     }
     
+    sx_xunlock(&allproc_lock);
+    return (0);
+}
+
+// returns 1 if each proc in the pidhashtbl is in the allproc list.
+// returns 0 otherwise.
+static int
+pidhashtbl_in_allproc() {
+
+    sx_xlock(&allproc_lock);
+    for (pid_t i = 0; i <= pid_max; i++) {
+
+        struct proc *p;
+        LIST_FOREACH(p, PIDHASH(i), p_hash) {
+            if (p != NULL) {
+                PROC_LOCK(p);
+
+                // if the process is currently being created,
+                // it may not have been completely initialized yet.
+                // XXX
+                // it might be possible that rootkit processes may hide themselves
+                // from being probed by setting their p_state to PRS_NEW.
+                if (p->p_state == PRS_NEW) {
+                    PROC_UNLOCK(p);
+                    continue;
+                }
+
+                if (p->p_pid == i) {
+
+                    int isFound = 0;
+                    struct proc *found = NULL;
+                    FOREACH_PROC_IN_SYSTEM(found) {
+                        // if found == p (they are the same process),
+                        // then this if check will prevent us from double locking the process.
+                        if (!(PROC_LOCKED(found))) {
+                            PROC_LOCK(found);
+                        }
+                        // XXX
+                        // it might be possible that rootkit processes may hide themselves
+                        // from being probed by setting their p_state to PRS_NEW.
+                        if (found->p_state == PRS_NEW) {
+		                	PROC_UNLOCK(found);
+		                	continue;
+		                }
+                        if (found->p_pid == i) {
+                            isFound = 1;
+                            // XXX the currently held lock of the process *must* be
+                            // released after breaking out of this foreach loop.
+                            break;
+                        }
+                        // if these two processes have different mutexes,
+                        // it means that they are different processes.
+                        // if they are different processes, then it is
+                        // safe to release the mutex of found (again,
+                        // found proc is the process we are iterating through
+                        // in the allproc list).
+                        if (&(p->p_mtx) != &(found->p_mtx)) {
+                            PROC_UNLOCK(found);
+                        // else somehow the mutexes of the two processes are the
+                        // same but their pids are different (because if their pids
+                        // were the same, then we would have broken out of the foreach
+                        // loop with the break statement in the if statement above).
+                        // XXX the currently held lock of the process *must* be
+                        // released after breaking out of this foreach loop.
+                        } else {
+                            break;
+                        }
+                    }
+
+                    if (isFound == 0) {
+                        PROC_UNLOCK(p);
+                        sx_xunlock(&allproc_lock);
+                        return (1);
+                    }
+                }
+
+                PROC_UNLOCK(p);
+            }
+        }
+    }
+
     sx_xunlock(&allproc_lock);
     return (0);
 }
@@ -63,7 +175,8 @@ load(struct module *module, int cmd, void *arg) {
     switch (cmd) {
     case MOD_LOAD: { // case opening bracket so that there are no issues with vardecls.
 
-        ret = allproc_in_pidhashtbl();
+        ret = allproc_in_pidhashtbl() ||
+                pidhashtbl_in_allproc();
 
         break;
 
