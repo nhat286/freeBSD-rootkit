@@ -8,8 +8,11 @@
 #include <sys/lock.h>
 #include <sys/sx.h>
 
-// returns 1 if each proc in the allproc list is in the pidhashtbl.
-// returns 0 otherwise.
+#define TRUE 1
+#define FALSE 0
+
+// returns TRUE if each proc in the allproc list is in the pidhashtbl.
+// returns FALSE otherwise.
 static int
 allproc_in_pidhashtbl() {
 
@@ -29,7 +32,7 @@ allproc_in_pidhashtbl() {
 		}
 
         // check that each proc in the allproc list is in the pidhashtbl
-        int isFound = 0;
+        int isFound = FALSE;
         struct proc *found = NULL;
         LIST_FOREACH(found, PIDHASH(p->p_pid), p_hash) {
 
@@ -47,7 +50,7 @@ allproc_in_pidhashtbl() {
                     continue;
                 }
                 if (found->p_pid == p->p_pid) {
-                    isFound = 1;
+                    isFound = TRUE;
                     // XXX the currently held lock of the process *must* be
                     // released after breaking out of this foreach loop.
                     break;
@@ -72,21 +75,21 @@ allproc_in_pidhashtbl() {
             }
         }
 
-        if (isFound == 0) {
+        if (isFound == FALSE) {
             PROC_UNLOCK(p);
             sx_sunlock(&allproc_lock);
-            return (1);
+            return (FALSE);
         }
 
         PROC_UNLOCK(p);
     }
-    
+
     sx_xunlock(&allproc_lock);
-    return (0);
+    return (TRUE);
 }
 
-// returns 1 if each proc in the pidhashtbl is in the allproc list.
-// returns 0 otherwise.
+// returns TRUE if each proc in the pidhashtbl is in the allproc list.
+// returns FALSE otherwise.
 static int
 pidhashtbl_in_allproc() {
 
@@ -110,7 +113,7 @@ pidhashtbl_in_allproc() {
 
                 if (p->p_pid == i) {
 
-                    int isFound = 0;
+                    int isFound = FALSE;
                     struct proc *found = NULL;
                     FOREACH_PROC_IN_SYSTEM(found) {
                         // if found == p (they are the same process),
@@ -126,7 +129,7 @@ pidhashtbl_in_allproc() {
 		                	continue;
 		                }
                         if (found->p_pid == i) {
-                            isFound = 1;
+                            isFound = TRUE;
                             // XXX the currently held lock of the process *must* be
                             // released after breaking out of this foreach loop.
                             break;
@@ -150,10 +153,10 @@ pidhashtbl_in_allproc() {
                         }
                     }
 
-                    if (isFound == 0) {
+                    if (isFound == FALSE) {
                         PROC_UNLOCK(p);
                         sx_xunlock(&allproc_lock);
-                        return (1);
+                        return (FALSE);
                     }
                 }
 
@@ -163,7 +166,7 @@ pidhashtbl_in_allproc() {
     }
 
     sx_xunlock(&allproc_lock);
-    return (0);
+    return (TRUE);
 }
 
 // function that is called when the module is loaded and unloaded.
@@ -174,9 +177,19 @@ load(struct module *module, int cmd, void *arg) {
 
     switch (cmd) {
     case MOD_LOAD: { // case opening bracket so that there are no issues with vardecls.
+        int err;
 
-        ret = allproc_in_pidhashtbl() ||
-                pidhashtbl_in_allproc();
+        err = allproc_in_pidhashtbl();
+        if (err == FALSE) {
+            ret = 1;
+            break;
+        }
+
+        err = pidhashtbl_in_allproc();
+        if (err == FALSE) {
+            ret = 1;
+            break;
+        }
 
         break;
 
