@@ -11,11 +11,20 @@ int find_marker(int fd);
 
 int main(int argc, char* argv[]) {
    char syscalls[100000] = {'\0'};
-   //char target_syscalls[100000] = {'\0'};
+   char target_syscalls[100000] = {'\0'};
 
    read_syscall_binary("log", syscalls);
+   read_syscall_binary("mes", target_syscalls);
+   int i;
+   for (i = 0; i < 100000; i++) {
+      if (syscalls[i] != target_syscalls[i]) {
+         printf("inline hook!\n");
+         return 1;
+      }
+   }
 
-   print_str(syscalls);
+   //print_str(syscalls);
+   printf("yay\n");
 
    return 0;
 }
