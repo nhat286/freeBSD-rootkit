@@ -2,6 +2,7 @@
 #include<unistd.h>
 #include<stdio.h>
 
+int run_consistency_check(char* dump1, char* dump2);
 void read_syscall_binary(char* filename, char* buffer);
 void print_str(char* string);
 int str_icpy(char* string1, int offset1, char* string2, int offset2);
@@ -15,17 +16,19 @@ int main(int argc, char* argv[]) {
 
    read_syscall_binary("log", syscalls);
    read_syscall_binary("mes", target_syscalls);
-   int i;
+
+   return run_consistency_check(syscalls, target_syscalls);
+}
+
+
+int run_consistency_check(char* dump1, char* dump2) {
+   int i = 0;
    for (i = 0; i < 100000; i++) {
-      if (syscalls[i] != target_syscalls[i]) {
-         printf("inline hook!\n");
+      if (dump1[i] != dump2[i]) {
+         printf("Inline rootkit\n");
          return 1;
       }
    }
-
-   //print_str(syscalls);
-   printf("yay\n");
-
    return 0;
 }
 
@@ -74,6 +77,9 @@ void read_syscall_instructions(char* syscalls, int fd) {
    int offset = 0;
    int flag = 0;
 
+   int stars = 0;
+   int done = 0;
+
    while (1) {
 
       line_offset = 0;
@@ -81,6 +87,13 @@ void read_syscall_instructions(char* syscalls, int fd) {
          readsize = read(fd, instructions, 1);
          if (readsize <= 0) break;
          if (instructions[0] == '\n') break;
+
+         if (instructions[0] == 'v' && stars == 2) {
+            done = 1;
+            break;
+         } else if (instructions[0] == '*' && stars > 2) stars = 2;
+         else if (instructions[0] == '*') stars++;
+         else stars = 0;
 
          line[line_offset] = instructions[0]; 
          line_offset++;
@@ -95,6 +108,8 @@ void read_syscall_instructions(char* syscalls, int fd) {
       if (flag > 0) sys_dump_offset = get_dump_offset(line);
 
       offset = str_icpy(syscalls, offset, line, sys_dump_offset);
+
+      if (done == 1) break;
    }
 
 }
@@ -112,7 +127,7 @@ int find_marker(int fd) {
        for (i=0; i < 1000 && instructions[i] != '\0'; i++) {
           offset += 1;
           if (instructions[i] == '*' && stars > 2) {
-             stars = 1;
+             stars = 2;
           } else if (instructions[i] == '^' && stars == 2) {
              flag = 1;
              break;
