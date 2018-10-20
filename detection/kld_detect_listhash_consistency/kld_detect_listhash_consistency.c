@@ -385,6 +385,7 @@ threads_in_runq_consistent() {
     // acquiring the sched lock should prevent proc0/the scheduler from
     // running and interfering with our operations.
     mtx_lock_spin(thread0.td_lock);
+    critical_enter();
 
     // struct td_sched {
     //     fixpt_t		ts_pctcpu;	/* %cpu during p_swtime. */
@@ -421,26 +422,31 @@ threads_in_runq_consistent() {
         // printf("RQB_BIT is: ");
         // print_bits(RQB_BIT(rqnum));
 
+        printf("rq number: %d\n", rqnum);
+
         // only check the threads in that runq if the runq is not empty.
         if (rqb->rqb_bits[RQB_WORD(rqnum)] & RQB_BIT(rqnum)) {
 
-            // struct rqhead *rqhead = &(runq->rq_queues[rqnum]);
-            // struct thread *td = NULL;
-            // // TAILQ_FOREACH(TYPE *var, TAILQ_HEAD *head, TAILQ_ENTRY NAME);
-            // TAILQ_FOREACH(td, rqhead, td_runq) {
-            //     thread_lock(td);
+            struct rqhead *rqhead = &runq->rq_queues[rqnum];
+            struct thread *td = NULL;
+            // TAILQ_FOREACH(TYPE *var, TAILQ_HEAD *head, TAILQ_ENTRY NAME);
+            TAILQ_FOREACH(td, rqhead, td_runq) {
 
-            //     if (td != NULL) {
-            //         printf("x ");
-            //     }
 
-            //     thread_unlock(td);
-            // }
+                printf("thread: %p\n", td);
+
+                if (td < (struct thread *)0xc0000000 || td >= (struct thread *)0xd0000000) {
+                    printf("breaking out\n");
+                    break;
+                }
+
+            }
             printf("bla \n");
         }
     }
 
     // release the scheduler lock.
+    critical_exit();
     mtx_unlock_spin(thread0.td_lock);
 
 #endif /* SMP */
