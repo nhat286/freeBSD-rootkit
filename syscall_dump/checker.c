@@ -16,6 +16,8 @@ int main(int argc, char* argv[]) {
 
    read_syscall_binary("log", syscalls);
    read_syscall_binary("mes", target_syscalls);
+   
+   print_str(syscalls);
 
    return run_consistency_check(syscalls, target_syscalls);
 }
