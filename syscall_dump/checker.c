@@ -83,7 +83,7 @@ void read_syscall_instructions(char* syscalls, int fd) {
       int sys_dump_offset = 0;
       flag = 1;
       
-      if (flag > 0) get_dump_offset(line);
+      if (flag > 0) sys_dump_offset = get_dump_offset(line);
 
       offset = str_icpy(syscalls, offset, line, sys_dump_offset);
    }
