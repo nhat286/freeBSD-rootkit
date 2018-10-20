@@ -3,7 +3,7 @@
 #include<stdio.h>
 
 int run_consistency_check(char* dump1, char* dump2);
-void read_syscall_binary(char* filename, char* buffer);
+int read_syscall_binary(char* filename, char* buffer);
 void print_str(char* string);
 int str_icpy(char* string1, int offset1, char* string2, int offset2);
 int get_dump_offset(char* string);
@@ -14,8 +14,12 @@ int main(int argc, char* argv[]) {
    char syscalls[100000] = {'\0'};
    char target_syscalls[100000] = {'\0'};
 
-   read_syscall_binary("log", syscalls);
-   read_syscall_binary("mes", target_syscalls);
+   int ret_val;
+
+   ret_val = read_syscall_binary("log", syscalls);
+   if (ret_val < 0) return 0;
+   ret_val = read_syscall_binary("mes", target_syscalls);
+   if (ret_val < 0) return 0;
 
    return run_consistency_check(syscalls, target_syscalls);
 }
@@ -32,18 +36,23 @@ int run_consistency_check(char* dump1, char* dump2) {
    return 0;
 }
 
-void read_syscall_binary(char* filename, char* buffer) {
+int read_syscall_binary(char* filename, char* buffer) {
    
    int fd = open(filename, O_RDONLY);
    if (fd < 0) printf("File not found!");
 
    int offset = find_marker(fd);
+
    close(fd);
+
+   if (offset < 0) return -1;
    fd = open(filename, O_RDONLY);
    
    int ret_offset = lseek(fd, offset, SEEK_SET);
 
    read_syscall_instructions(buffer, fd);
+
+   return 0;
 }
 
 void print_str(char* string) {
@@ -121,6 +130,10 @@ int find_marker(int fd) {
    int stars = 0;
    int offset = 0;
    int i = 0;
+   int found = 0;
+
+   int found_offset = -1;
+   
 
    while (read(fd, instructions, 999) > 0 && flag == 0) {
 
@@ -129,8 +142,7 @@ int find_marker(int fd) {
           if (instructions[i] == '*' && stars > 2) {
              stars = 2;
           } else if (instructions[i] == '^' && stars == 2) {
-             flag = 1;
-             break;
+             found_offset = offset;
           } else if (instructions[i] == '*') {
              stars += 1;
           } else {
@@ -139,5 +151,5 @@ int find_marker(int fd) {
        }
    }
 
-   return offset;
+   return found_offset;
 }
