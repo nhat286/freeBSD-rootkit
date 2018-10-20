@@ -40,17 +40,17 @@ load(struct module *module, int cmd, void *arg) {
         uprintf("*****\n");
         */
         //uprintf("=====================\n");
-        printf("*^*");
+        printf("**^**");
         for (int i = 0; i < SYS_MAXSYSCALL; i++) {
             int j = 0;
             char *s = (char *) curthread->td_proc->p_sysent->sv_table[i].sy_call;
             for (; j == 0 || (int ) s % 4096 != 0; s++) {
-                if (j == 50) break;
+                if (j == 30) break;
                 printf("%x ", (unsigned int) (*s));
                 j++;
             }
         }
-        printf("*v*");
+        printf("**v**");
 
         break;
 
