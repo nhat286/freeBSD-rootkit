@@ -1,9 +1,10 @@
-#!/bin/sh
+#!./bin/sh
 
 if [ `id -u` -ne 0 ]
 then
     exit 1
 fi
 
-./hashcheck || exit 1
-./kernel_check || exit 1
+(./bin/sh hashcheck) || exit 1
+(./bin/sh kernel_check) || exit 1
+(./bin/sh check_kldstat) || exit 1

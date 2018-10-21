@@ -1,5 +1,3 @@
-#!/bin/sh
-
 # ==== run hashsum checks on binaries ====
 # bring in our own md5 and cat, hash the binaries and compare to our hashsum file
 # if there is any difference it should raise some flags
@@ -20,7 +18,7 @@ do
 
     if [ "$hsum" = "$nsum" ] 
     then
-        echo -e "[passed]\t $file"
+        echo -e "[passed]\t $file" || exit 1
     else
         exit 1
     fi
