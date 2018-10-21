@@ -63,15 +63,6 @@ fi
 
 done < hashsums 
 
-# ==== load a fake KLD and it should be at syscall offset 210 ====
-#MSG="$(kldload bin/sc_example.ko 2>&1)"
-#NUM=`bin/cat "$MSG" | grep -o "[0-9]+"`
-#echo $NUM
-#kldunload sc_example.ko
-
-# ==== if stage one: run daemonized ktrace / truss to listen for syscalls and suspicious strings
-# ==== if stage two: collect results and analyse ====
-
 # ===== preserve access times of whoami , id, and ls ====
 echo "Storing access times of whoami, id, and ls in /tmp"
 rm -f /tmp/preserve
