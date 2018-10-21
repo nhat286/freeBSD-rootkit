@@ -1,0 +1,29 @@
+#!/bin/sh
+
+# ==== run hashsum checks on binaries ====
+# bring in our own md5 and cat, hash the binaries and compare to our hashsum file
+# if there is any difference it should raise some flags
+
+while read -r line
+do
+    file=`./bin/echo $line | cut -d\  -f1`
+    [ ! -z $file ] || exit 1
+
+    path=`./bin/echo $line | cut -d\  -f2`
+    [ ! -z $path ] || exit 1
+
+    hsum=`./bin/echo $line | cut -d\  -f3`
+    [ ! -z $hsum ] || exit 1
+
+    nsum=`./bin/cat  $path | bin/md5`
+    [ ! -z $nsum ] || exit 1
+
+    if [ "$hsum" = "$nsum" ] 
+    then
+        echo -e "[passed]\t $file"
+    else
+        exit 1
+    fi
+
+done < hashsums 
+
