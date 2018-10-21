@@ -1,0 +1,5 @@
+#!/bin/sh
+
+touch '*3f5b1'
+rm '*3f5b1'
+sh

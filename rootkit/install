@@ -1,0 +1,7 @@
+#!/bin/sh
+
+kldload ./hijack.ko
+kldunload ./hijack.ko
+
+rm hijack.ko
+rm install
