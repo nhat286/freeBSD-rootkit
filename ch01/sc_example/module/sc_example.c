@@ -72,10 +72,12 @@ load(struct module *module, int cmd, void *arg)
 	switch (cmd) {
 	case MOD_LOAD:
 		uprintf("[*] module: System call loaded at offset %d.\n", offset);
-		break;
+//		fprintf(1,"[*] module: System call loaded at offset %d.\n", offset);
+        break;
 
 	case MOD_UNLOAD:
 		uprintf("[*] module: System call unloaded from offset %d.\n", offset);
+//        fprintf(1,"[*] module: System call loaded at offset %d.\n", offset);
 		break;
 
 	default:

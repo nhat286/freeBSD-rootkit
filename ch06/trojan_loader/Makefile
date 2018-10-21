@@ -1,4 +1,4 @@
-CC=gcc
+CC=cc
 
 default: trojan_loader
 

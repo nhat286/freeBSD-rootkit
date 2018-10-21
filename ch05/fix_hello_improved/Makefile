@@ -1,4 +1,4 @@
-CC=gcc
+CC=cc
 
 default: fix_hello_improved
 
