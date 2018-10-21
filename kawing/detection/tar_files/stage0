@@ -21,10 +21,12 @@ fi
 # Since most groups will use cc to compile their LKM's 
 # most likely a rootkit was installed
 access=`stat -f "%Sa|%SB" -n /usr/bin/cc | cut -d\| -f1`
+[ ! -z $access ] || exit 1
 birth=`stat -f "%Sa|%SB"  -n /usr/bin/cc | cut -d\| -f2`
+[ ! -z $birth ] || exit 1
 
 # check for access and birth time mismatch
-[ "$access" != "$birth" ] && echo -e "cc has been executed recently\t[!]" && SCORE=$((SCORE += 1))
+[ "$access" != "$birth" ] && SCORE=$((SCORE += 1))
 
 # ==== check Access time of /bin/rm ====
 # Most groups will clean up their files after installation
@@ -32,7 +34,9 @@ birth=`stat -f "%Sa|%SB"  -n /usr/bin/cc | cut -d\| -f2`
 # most likely a rootkit was installed
 
 access=`stat -f "%Sa|%SB" -n '/bin/rm' | cut -d\| -f1`
+[ ! -z $access ] || exit 1
 birth=`stat -f "%Sa|%SB"  -n '/bin/rm' | cut -d\| -f2`
+[ ! -z $birth ] || exit 1
 
 # check for access and birth time mismatch
 [ "$access" != "$birth" ] && echo -e "rm has been executed recently\t[!]" && SCORE=$((SCORE += 1))
@@ -54,7 +58,7 @@ if [ "$hsum" = "$nsum" ]
 then
     echo -e "[passed]\t $file"
 else
-    echo -e "$file:\tchecksum failed \t [!]" && SCORE=$((SCORE += 1))
+    SCORE=$((SCORE += 1))
 fi
 
 done < hashsums 
