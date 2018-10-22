@@ -17,11 +17,13 @@ int main(int argc, char* argv[]) {
 
    ret_val = read_syscall_binary("log", syscalls);
    if (ret_val < 0) {
+printf("here\n");
        return 1;
    }
 
    ret_val = read_syscall_binary("mes", target_syscalls);
    if (ret_val < 0) {
+printf("here\n");
        return 1;
    }
 
