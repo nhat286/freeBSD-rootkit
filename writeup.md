@@ -1,124 +1,41 @@
-# Final Rootkit Writeup
-__Members of Group 99:__
-```
- zXXXXXXX 
- zXXXXXXX
- z5137455 Minh Thien Nhat Nguyen
- z5087077 Ka Wing Ho
-```
 
-## Installation
+Final Rootkit Writeup
+Members of Group 99:
 
-Answer: Our rootkit is a loadable kernel module that hijacks a preexisting syscall to perform privilege escalation if a specific set of arguments is passed in. If not, then the hijacked syscall would mimic the original syscall to minimise the possibility of detection. For our current implementation, the hijack victim syscall will be `rmdir`, which is syscall number 137. 
+z5091650 Johnson Shi
+z5110198 Deepanjan Chakrabraty
+z5137455 Minh Thien Nhat Nguyen
+z5087077 Ka Wing Ho
 
+Rootkit
 
-`sys/pcpu.h` provides a definition of curthread which is a pointer to the struct thread of the currently executing thread. Struct thread has a member called `td_proc` which is a pointer to the associated process of the currently running thread. Struct proc has a pointer to struct `sysentvec` which is a structure containing all of the syscall entries and associated metadata of the system. Struct sysentvec has a member called `sv_table` which is an array of struct `sysent`s. This `sv_table` array is indexed using syscall numbers. Struct `sysent` contains a function pointer to the system call handler/function for a specific syscall number, and it also contains associated metadata for the system call such as number of arguments.
+Our rootkit is a loadable kernel module that hijacks a preexisting syscall to perform privilege escalation if a specific set of arguments is passed in. If not, then the hijacked syscall would mimic the original syscall to minimise the possibility of detection. For our current implementation, the hijack victim syscall will be openat, which is syscall number 499.
+sys/sysent.h provides a definition of sysent which is a pointer to the global sysent table of the machine, which is an array of struct sysents. Struct sysent contains a function pointer to the system call handler/function for a specific syscall number, and it also contains associated metadata for the system call such as number of arguments.
+Upon loading the kernel module using kldload, our current implementation mallocs a memory region of size 256 bytes to store the hook function. It does so by copying the instruction bytes from our function hook to the malloc-ed address, stopping only when 256 bytes have been copied or when we hit a page boundary (because permissions may not be the same across pages). Then, it writes a relative jump instruction at 3 bytes after the old syscall address. The relative jump will jump from old_syscall_address+3 to the malloc-ed region of memory. The reason why we insert the inline jump hook 3 bytes after the beginning of the syscall is to minimize our chances of being detected (as some teams will check for the first opcode at the beginning of the syscall address and check whether that is an opcode that transfers execution, such as jmp or call instructions). The kernel module is then unloaded using kldunload as it has served its purpose which is to inject an inline hooking inside the syscall to jump to our own malicious function residing in the malloc-ed region of memory.
+The general idea of our rootkit is that it will keep the function pointer of the system call entry to point to openat’s original syscall handler. The inline function hook will then transfer execution to our function hook. Our function hook will then reinvoke the old system call passing it the same set of arguments. If the return value of the original system call is not 0, then it is not safe for the function hook to check for the arguments of the syscall as they may not be mapped to function memory. If the original syscall returns 0 indicating successful execution, we will then check the path argument to see if the path prefix matches a password string. If it does match, we will set curthread’s ucred struct (which represents user credentials) to root. This escalates the currently running processes and future child processes to root. Our script will then pop a shell using the sh command.
+Our function hook (which resides in the malloc-ed region of memory) has a small nop-sled at the beginning of the function. When the openat syscall is invoked, the old system call handler will be called. The first three instruction bytes would be executed (the first 3 instructions are part of the function prologue where the stack is set up). The relative jump would then be performed to jump to the nop-sled at the beginning of the function hook. Because we reached the function hook through the nop-sled and because we reached this function without having its function prologue being executed, we need to manually set up the function prologue (its stack). But as the first 3 instructions have been executed (which pushes the old base pointer and sets the new base pointer) we will set up the remaining instructions of the function prologue. Since we have overwritten bytes 3 to 7 of the old system call, we cannot use the call instruction to jump to the old system call otherwise the stack will be inconsistent which will cause a crash. The 5 bytes corresponding to the relative jump hook also overwrites some instructions relevant to setting up the stack of the old system call. These reasons prevent us from just using the call instruction to jump to the old system call.
+We will get the program counter from within the inline function hook, store it into ecx and increment it so that ecx contains an address that points to the second nop-sled of the function hook (which resides down below). We manually push ecx as the return value of the old system call. We also push in the system call’s arguments. We then set up the first 8 bytes of the function prologue of old system call because we have partially overwritten them with a jump hook. We will then perform an absolute jump to old_syscall+8 by performing a push ret trick. This transfers execution to the old system call. The second nop-sled follows these instructions. We also use several compiler tricks to prevent certain regions of the code from being optimised out, and also to ensure that the compiler always associates the variable ret_val with eax.
+When the old system call returns, it returns to the second nop-sled. Its return value will be placed inside eax which the compiler thinks is the variable ret_val. If the ret_val is 0, then we proceed with checking for the password prefix and escalating the current thread.
 
+Changes made since the midpoint
 
-Upon loading the kernel module using `kldload`, our current implementation saves the current syscall handler for the hijacked victim in a static function pointer called `old_sycall`. It then redirects the syscall handler to point to `new_sy_call`. The kernel module is then unloaded using `kldunload` as it has served its purpose which is to override the syscall function pointer to our own malicious function.
+Instead of simply redirecting the syscall function pointer, we now insert a jump hook to jump to our function hook at a malloc-ed region of memory. Also, instead of targeting the rmdir syscall, we now target the openat syscall which is used by the touch command. If `touch ‘*3f5b1’`, the current process and thread are escalated to root.
+Our rootkit does not attempt any bonus challenges.
 
+Detection
 
-When the victim syscall (rmdir syscall) is invoked, the `new_sy_call` function first invokes the original syscall using the previously saved `old_sy_call` function pointer while passing it the same args. If the return value is not 0 (which indicates that the syscall was not successful), then we return the return value from the original syscall as the system call arguments may have been mapped to invalid pages if the original syscall failed. If not, then the argument pointer is cast to a struct `sc_args` pointer which represents the arguments of a struct. If the path member of this argument struct matches a predefined password, then we escalate the current thread and its associated process to root. The return value from the original system call invocation is returned to mimic the real behaviour of the original syscall. 
+Our detect tarfile contains several statically linked binaries so that we minimize dependence of the rootkit detector on host userland binaries. The shebang of our detect script refers to a statically linked sh binary that we obtained from /rescue so that teams that have manipulated /bin/sh cannot defeat and prevent execution of our detect script. The detect script calls other scripts (one for kernel-side checking, one for hashsum checking of common userland binaries + the kernel file itself, and one for detecting userland inconsistencies with kldstat).
+Kernel-side detection
+The kernel-side detection depends on several kernel modules that check for the consistency. We use kernel modules because they are a convenient way to execute within the kernel. The modules are loaded using a statically linked version of kldload. The first kernel module checks the syscall function pointer entries of all syscalls within the sysent, and compares them with known values from a clean host. Since this VM will not have KASLR, and since the sysent is set up during boot time (boot sequence is the same for clean hosts), the known values from a clean host will always be the same for clean hosts. The second kernel module checks whether the first few instructions of the syscall handler functions are JMP or CALL instructions. We cannot conclusively check deeper instructions because x86 is a CISC ISA and the opcodes may appear within the function as either opcode instructions or instruction arguments. The third kernel module checks the consistency of the proc and thread data structures. This module checks whether each proc in the allproc list is in the pidhashtbl, each proc that exists in the pidhashtbl is in the allproc list, each thread in each proc exists in the tidhashtbl, nprocs is consistent with the number of elements in allproc list, zombproc list, and pidhashtbl, and for each proc, actual nthreads is consistent with the p_numthreads field of the proc.
 
-#### Changes made since midpoint
+Hashsum Check
 
-__For final rootkit version__
+Although fairly trivial, we also do some signature detection, by bringing a file with hashsums of common binaries as well as the kernel file to catch any teams who meddle in the userland. We use a statically linked md5 binary (and other helper binaries such as cat and echo) to calculate the hashsums and compare them with the hashsum values we obtained from a clean host.
+The last detect script checks for inconsistencies of kldstat using a statically linked version of kldstat. It greps to check whether any other modules are loaded in memory, and whether there are more than two modules in the system. It also ensures that the kernel module itself is within the system.
 
-Answer: Our rootkit is a loadable kernel module that hijacks a preexisting syscall to perform privilege escalation if a specific set of arguments is passed in. If not, then the hijacked syscall would mimic the original syscall to minimise the possibility of detection. For our current implementation, the hijack victim syscall will be `openat`, which is syscall number 499. 
-
-
-`sys/pcpu.h` provides a definition of curthread which is a pointer to the struct thread of the currently executing thread. Struct thread has a member called `td_proc` which is a pointer to the associated process of the currently running thread. Struct proc has a pointer to struct `sysentvec` which is a structure containing all of the syscall entries and associated metadata of the system. Struct sysentvec has a member called `sv_table` which is an array of struct `sysent`s. This `sv_table` array is indexed using syscall numbers. Struct `sysent` contains a function pointer to the system call handler/function for a specific syscall number, and it also contains associated metadata for the system call such as number of arguments.
-
-
-Upon loading the kernel module using `kldload`, our current implementation mallocs a memory region of size 256 bytes to store the hook function. Then, it writes a jump instruction after the first 3 bytes (setting up the stack with `push ebp; mov ebp, esp;`) to that memory region. The kernel module is then unloaded using `kldunload` as it has served its purpose which is to inject an inline hooking inside the syscall to jump to our own malicious function.
-
-
-When the victim syscall (openat syscall) is invoked, the syscall function first sets up the stack with `push ebp; mov ebp, esp;`, and jumps to our malicious function in memory. Then, the new function continues setting up the stack to keep the stack state valid and consistent, then do a `ret` to the original syscall to save the instruction pointer to our new function onto the stack. The openat syscall executes normally, and at the end returns to our function in memory with the saved instruction pointer on the stack. The new function will then escalate if the argument to the syscall matches the specific string, then returns with the return value of `openat` to mimic the real behaviour of the original syscall.
-
-## Privillege Escalation
-
-
-The escatate function takes in a struct thread pointer and escalates the thread and its associated process to root by modifying its struct ucred, which is a pointer to the credentials struct of this thread and its process. This escalates the process of the currently executing install script to root. After the script process terminates and returns to the controlling tty (terminal), the controlling tty is escalated to root as well due to a kernel optimization. This is because when the install process is forked and executed as a child process of the controlling tty, the ucred struct is not duplicated by the kernel if the child process isn’t explicitly forked and launched with the option to explicitly assume the identity of a user, hence the child and parent processes share the same ucred struct. This means that modifying the ucred struct of the child process also modifies the permissions of the parent process.
-
-
-When the rmdir syscall is invoked successfully (with a retval of 0), and if the syscall has the secret password as the path argument (such as `mkdir PRIV_ESC_PASSWD && rmdir PRIV_ESC_PASSWD`), then the child process (the install program) is escalated to root. When the child process (the install program) returns then the controlling tty will have root privileges as well.
-
-#### Changes made since midpoint
-
-__For final rootkit version__
-When the openat syscall is invoked (by running `touch` or `mkdir`) with the path argument that matches the secret password (such as `mkdir *3f5b1 && rmdir *3f5b1`), then the child process (the install program) is escalated to root. When the child process (the install program) returns then the controlling tty will have root privileges as well.
-
-## Stealth 
-
-
-Since the hijacking is done when the kernel module is loaded, there is no need for the kernel module to reside within the kernel after it has achieved its purpose. It can then be safely unloaded immediately using kldunload, leaving no trace of the rootkit module in either kldstat or within the kernel list for kernel modules.
-
-
-Also, since the privilege escalation is done without invoking `system(su);` or other commands that log activities to `/var/log/*`, there is no need to perform any cleanup with regards to the log files.
-
-#### Changes made since midpoint
-
-## Bonus Marks 
-Our rootkit currently does not attempt any bonus marks.
-
-## Rootkit Design Decisions
-(do we still need this ? hmmm) 
-```
-```
-![RUN](https://vgy.me/STqsgy.png)
-```
-```
-```
-NOTES: CHANGES MADE SINCE MIDPOINT
-- we no longr use mkdir() with a long password string
-- we changed it to use touch() instead (check the __For final rootkit version__)
-- ~~(we clean up the syscall table so the pointers look unchanged (but the opcodes of the syscall have changed))~~
-- Technically, we didn't touch the syscall table, we instead hijacking the syscall instructions itself, so the table is clean, but not the opcodes.
-    - this is also how we can detect our midpoint rootkit 
-```
-
-
-## Detection Tactics ~(detection methods and how)~
-
-(CHANGE THE STAGE4.SH BEAUSE PERL IS NOT INSTALLED)
-
-#### Inspecting the integrity of the syscall table
-- use johnsons detections kernel modules
-- check if syscall entries exactly match
-   - checks if all the ptrs in the syscall table the same
-   - it should always be consisntent 
-- checks for processes tidhashtable
-- runq (couldnt get it to work but put lots of effort into it)
-i
-the way his thing works is that if the kernel is dirty then the lkm will fail to load
-we simply write a userland to run modfind and this will tell us if the system is infected 
-
-#### Comparing thread count with pidhashtable
-
-####  High-level detection
-We remain careful with this sort of detection as false positives are inherently high (especially since the spec mentioned that there are other processes running to simulate a real system)
-
-Since most rootkits will have to compile their kernel objects somehow (some groups have written in their midpoints submissions that they will have make files), there is a chance that the local `cc` compiler willbe used, we check that the access time has not changed since birth, if it has that increases the rootkit score
-
-During escalation the spec mentions that some commands will be run, we predict these commands will be `ls`, `id` and `whoami` therefore we saved the access times of these binaries pre-escalation, and compare with these binaries post-escalation. On a clean host these should not change. 
-
-Although fairly trivial, we also do some signature detection, by bringing a file with hashsums of popular binaries to trojan as well as the kernel file, to catch any teams who meddle in the userland.
-
-
-
-#### Comparing the syscall table against a saved snapshot of a clean syscall table
-Deep and Eric wrote a syscall\_dumper loadable kernel module `opcodes.ko` which would print out the syscall table rows to `dmesg`, this dumped table is then parsed with a statically-linked userland program `checker`, and will return whether inline hooking instructions are present in the in-memory syscall table. 
-
-## Rootkit Detector Design Decisions
-- we saw lots of other teams doing the bonus marks
-- also some teams were relying very heavily on the book methods (some of them are not entirely hiding the rootkit)
-- therefore we try to use out-of-the-book methods to catch sloppy teams
-- we also do high-level behaviour and signature detection just to be well-rounded
-- our detection doesn't focus very much on signature ie:
-    - trojan'ed binaries
-    - searching for suspicious files
- simply because most teams are not doing userland rootkits, therefore we shifted our focus more on kernel-level detection
-
-- the `detect.sh`script is actually just a dispatcher script that will call 5 other scripts in stages
-- the detect script keeps track of state via spawned daemons as well as a startup script in `/usr/local/etc/rc.d/` which will respawn daemons and restore important files after reboot 
-- it is also made to detect if the daemons or files are missing which will contribute to an early detection if any rootkit teams try to mess with our state 
+Rootkit Detector Design Decisions
+* we saw lots of other teams doing the bonus marks
+* also some teams were relying very heavily on the book methods (some of them are not entirely hiding the rootkit)
+* therefore we try to use out-of-the-book methods to catch sloppy teams
+* we also do high-level behaviour and signature detection just to be well-rounded
+* our detection doesn't focus very much on signature ie trojan'ed binaries searching for suspicious files simply because most teams are not doing userland rootkits, therefore we shifted our focus more on kernel-level detection
